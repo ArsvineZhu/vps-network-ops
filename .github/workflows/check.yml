@@ -1,0 +1,13 @@
+name: Offline source checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source without credentials or deployment
+        run: bash system/check.sh

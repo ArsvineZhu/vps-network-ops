@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "host": {"public_ipv4": "203.0.113.10", "server_name": "node.example.com", "wan": "ens3", "ssh_port": 23899, "dns": "1.1.1.1"},
+  "reality": {"server_name": "www.example.com", "target_port": 443},
+  "protocols": {
+    "vless": {"enabled": true, "port": 8443},
+    "hysteria2": {"enabled": false, "port": 8443},
+    "anytls": {"enabled": false, "port": 9444}
+  },
+  "devices": [{"id": "owner-laptop", "tcp_profile": "native", "udp_policy": "deny", "protocols": ["vless"], "ssh_direct": true}],
+  "tcpfp": {"enabled": false, "mtu": 1500},
+  "subscription": {"enabled": true, "hostname": "sub.example.com", "port": 9443},
+  "bbr": {"host": false, "namespaces": false},
+  "usage": {"enabled": true, "interval_seconds": 5}
+}

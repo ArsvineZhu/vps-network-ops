@@ -1,0 +1,44 @@
+[Unit]
+Description=Private approximate observed usage for Mihomo
+After=mihomo.service
+
+[Service]
+Type=simple
+User=mihomo
+Group=mihomo
+StateDirectory=mihomo-observed
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/mihomo-observed
+UMask=0077
+Environment=PYTHONNOUSERSITE=1
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+ExecStart=/usr/bin/python3 /usr/local/lib/mihomo-observed/usage_daemon.py --serve --config /etc/mihomo-observed/collector.json
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=78
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mihomo-observed
+InaccessiblePaths=-/etc/mihomo -/etc/caddy -/var/lib/caddy -/srv/vps-subscriptions
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+LimitNOFILE=128
+MemoryMax=128M
+CPUQuota=10%
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=60
+LogRateLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

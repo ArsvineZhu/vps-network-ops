@@ -1,0 +1,220 @@
+---
+- name: Install Ubuntu packages without allowing package scripts to start services
+  ansible.builtin.apt:
+    name:
+      - caddy
+      - nftables
+      - iproute2
+      - clang
+      - libbpf-dev
+      - linux-libc-dev
+      - build-essential
+      - python3
+      - openssl
+      - ca-certificates
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Create narrowly scoped service groups
+  ansible.builtin.group:
+    name: "{{ item }}"
+    system: true
+    state: present
+  loop:
+    - vps-mihomo
+    - vps-usage
+    - vps-controller
+    - vps-tls
+    - caddy
+
+- name: Create the proxy service identity
+  ansible.builtin.user:
+    name: vps-mihomo
+    group: vps-mihomo
+    groups: vps-controller,vps-tls
+    append: true
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    home: /var/lib/vps-mihomo
+
+- name: Create the private usage collector identity
+  ansible.builtin.user:
+    name: vps-usage
+    group: vps-usage
+    groups: vps-controller
+    append: true
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    home: /var/lib/vps-usage
+
+- name: Grant Caddy access only to TLS material, not the controller
+  ansible.builtin.user:
+    name: caddy
+    groups: vps-tls
+    append: true
+
+- name: Create root-owned code and configuration directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ deployment.directories }}"
+  no_log: true
+  diff: false
+
+- name: Create isolated writable state directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0700"
+  loop:
+    - {path: /var/lib/vps-mihomo, owner: vps-mihomo}
+    - {path: /var/lib/vps-usage, owner: vps-usage}
+
+- name: Copy verified local Mihomo to its root-owned executable tree
+  ansible.builtin.copy:
+    src: "{{ deployment.mihomo_binary }}"
+    dest: /usr/local/lib/vps-network/mihomo
+    owner: root
+    group: root
+    mode: "0755"
+  diff: false
+
+- name: Verify the installed Mihomo binary independently
+  ansible.builtin.stat:
+    path: /usr/local/lib/vps-network/mihomo
+    checksum_algorithm: sha256
+  register: installed_mihomo
+
+- name: Reject a mismatching installed binary
+  ansible.builtin.assert:
+    that: installed_mihomo.stat.checksum == expected_mihomo_sha256
+    fail_msg: Installed Mihomo checksum does not match the reviewed version.
+
+- name: Copy private rendered artifacts using the validated ownership and modes
+  ansible.builtin.copy:
+    src: "{{ item.local_source }}"
+    dest: "{{ item.target }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+    backup: false
+  loop: "{{ deployment.files }}"
+  no_log: true
+  diff: false
+
+- name: Read installed artifact hashes without revealing paths
+  ansible.builtin.stat:
+    path: "{{ item.target }}"
+    checksum_algorithm: sha256
+  loop: "{{ deployment.files }}"
+  register: installed_artifacts
+  no_log: true
+
+- name: Require installed artifacts to match the reviewed bundle
+  ansible.builtin.assert:
+    that: item.stat.checksum == item.item.sha256
+    fail_msg: Installed artifact hash differs from the bundle.
+  loop: "{{ installed_artifacts.results }}"
+  no_log: true
+
+- name: Build the reviewed BPF source only when a fingerprint backend is enabled
+  ansible.builtin.command:
+    argv: [make, -B, syn_rewrite.o]
+    chdir: /usr/local/lib/vps-network/ebpf
+  when: deployment.tcpfp_enabled
+  changed_when: true
+
+- name: Check proxy configurations without writing root-owned daemon state
+  block:
+    - name: Allocate a private disposable parser data directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: vps-network-validation-
+      register: parser_directory
+
+    - name: Check each rendered proxy configuration before starting anything
+      ansible.builtin.command:
+        argv:
+          - /usr/local/lib/vps-network/mihomo
+          - -t
+          - -d
+          - "{{ parser_directory.path }}"
+          - -f
+          - "{{ item.target }}"
+      loop: >-
+        {{ deployment.files | selectattr('target', 'match',
+           '^/etc/vps-network/(mihomo|windows|ios)\\.json$') | list }}
+      changed_when: false
+      no_log: true
+  always:
+    - name: Remove only this run's private disposable parser directory
+      ansible.builtin.file:
+        path: "{{ parser_directory.path }}"
+        state: absent
+      when: parser_directory is defined and parser_directory.path is defined
+      no_log: true
+
+- name: Verify TLS certificate lifetime before enabling TLS-dependent services
+  ansible.builtin.command:
+    argv: [openssl, x509, -in, /etc/vps-network/tls/fullchain.pem, -noout, -checkend, "604800"]
+  when: "'/etc/vps-network/tls/fullchain.pem' in (deployment.files | map(attribute='target') | list)"
+  changed_when: false
+  no_log: true
+
+- name: Extract public certificate key for a private equality check
+  ansible.builtin.command:
+    argv: [openssl, x509, -in, /etc/vps-network/tls/fullchain.pem, -noout, -pubkey]
+  when: "'/etc/vps-network/tls/fullchain.pem' in (deployment.files | map(attribute='target') | list)"
+  changed_when: false
+  register: certificate_public_key
+  no_log: true
+
+- name: Extract the matching public key from the imported private key
+  ansible.builtin.command:
+    argv: [openssl, pkey, -in, /etc/vps-network/tls/privkey.pem, -pubout, -passin, 'pass:']
+  when: "'/etc/vps-network/tls/fullchain.pem' in (deployment.files | map(attribute='target') | list)"
+  changed_when: false
+  register: private_public_key
+  no_log: true
+
+- name: Require certificate and private key to match
+  ansible.builtin.assert:
+    that: certificate_public_key.stdout == private_public_key.stdout
+    fail_msg: Imported TLS certificate and private key do not match.
+  when: "'/etc/vps-network/tls/fullchain.pem' in (deployment.files | map(attribute='target') | list)"
+  no_log: true
+
+- name: Check Caddy configuration and imported TLS files without starting Caddy
+  ansible.builtin.command:
+    argv: [caddy, validate, --config, /etc/vps-network/Caddyfile, --adapter, caddyfile]
+  when: "'caddy.service' in deployment.services"
+  changed_when: false
+  no_log: true
+
+- name: Check the dedicated guard with the real service UID without applying it
+  ansible.builtin.command:
+    argv: [python3, /usr/local/lib/vps-network/guard.py, check]
+  changed_when: false
+  no_log: true
+
+- name: Check existing network and firewall conflicts without changing them
+  ansible.builtin.command:
+    argv: [python3, /usr/local/lib/vps-network/network.py, check]
+  when: deployment.tcpfp_enabled
+  changed_when: false
+  no_log: true
+
+- name: Check generated unit syntax without starting units
+  ansible.builtin.command:
+    argv: "{{ ['systemd-analyze', 'verify'] + (deployment.files | map(attribute='target') | select('match', '^/etc/systemd/system/[^/]+\\.(service|timer)$') | list) }}"
+  changed_when: false
+  no_log: true

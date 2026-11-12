@@ -1,0 +1,71 @@
+# Private runtime data; prefer keeping it OUTSIDE this repository.
+/private/
+**/private/
+credentials/
+secrets/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*token*.txt
+*token*.json
+*secret*.json
+*credential*.json
+private-node.json
+public-template.json
+users.json
+# Generated profiles and member bundles (source templates remain tracked).
+profile.yaml
+provider.yaml
+categories.yaml
+record.json
+server-user.pending.json
+members/
+member-bundles/
+*-bundle/
+# Captures, databases, logs and local backups.
+snapshots/
+connections.json
+*connections*.json
+*snapshot*.json
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+logs/
+*.pcap
+*.pcapng
+*.bak
+*.backup
+*.zip
+# Interpreter/editor/OS caches.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Experimental executables and private reproductions; never package downloaded cores.
+/skills/operate-vps-network/experiments/**/mihomo-v1.19.33
+/skills/operate-vps-network/experiments/**/mihomo-*.gz
+/skills/operate-vps-network/experiments/**/private-run/
+
+# Unified system generated bundles and deploy inventories.
+/bundles/
+/generated/
+/system/output/
+/system/ansible/inventory/
+*.retry
+*.vault-password
+/system/tcpfp/ebpf/*.o
