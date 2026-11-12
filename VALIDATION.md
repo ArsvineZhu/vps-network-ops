@@ -19,6 +19,8 @@
 - 排除 Python 缓存、二进制、证书、运行日志、数据库和生成的私有部署包；保留源码结构、现有许可说明和六个可执行文件的执行位。
 - 协作目标为私有仓库 [ArsvineZhu/vps-network-ops](https://github.com/ArsvineZhu/vps-network-ops)。远端以完整整合快照建立初始版本，早期本地手册提交不作为远端祖先提交。
 - 发布前重跑 `system/check.sh`；Mihomo 解析检查使用上文哈希匹配的 v1.19.33 二进制。普通 CI 没有设置 `MIHOMO_BINARY` 时会明确跳过实际 Mihomo 解析，不能把该跳过当作已测。
+- 首次 GitHub Ubuntu 24.04 检查发现旧证书工具的兼容问题：该环境的 `openssl x509 -checkhost` 对主机名不匹配仍返回零退出码。现已要求输出明确的匹配结果，并增加零退出码但不匹配、空结果及异常结果的回归测试；不降低主机名检查要求。
+- 修复后本地聚合复测共 142 项：141 通过、1 项 AF_UNIX 夹具因环境限制跳过；实际 Mihomo 解析与 C 源 32,972 cases 均通过。GitHub 检查使用独立 Ubuntu 24.04 环境，其实际结果应以对应提交的 Actions 记录为准。
 
 ## 2026-11-12：TCP 方案与回环实验
 

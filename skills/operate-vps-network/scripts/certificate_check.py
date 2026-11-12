@@ -26,7 +26,11 @@ def check(cert, hostname, min_days=7):
         raise ValueError('certificate is not yet valid')
     if parse(dates['notAfter']) <= now + datetime.timedelta(days=min_days):
         raise ValueError('certificate expired or below minimum validity')
-    run('-checkhost', hostname)  # OpenSSL returns failure for mismatch.
+    # Older OpenSSL versions may exit successfully even for a hostname mismatch.
+    # Require the explicit positive result instead of trusting the exit code alone.
+    result = run('-checkhost', hostname).strip()
+    if result != f'Hostname {hostname} does match certificate':
+        raise ValueError('certificate hostname mismatch or unrecognized check result')
 
 
 def main():

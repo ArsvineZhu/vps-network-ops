@@ -2,6 +2,7 @@
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from certificate_check import check
 
@@ -21,8 +22,30 @@ class CertificateTests(unittest.TestCase):
     def test_valid(self):
         check(self.cert, 'sub.example.com', 0)
     def test_wrong_host(self):
-        with self.assertRaises(subprocess.CalledProcessError):
+        with self.assertRaises((ValueError, subprocess.CalledProcessError)):
             check(self.cert, 'other.example.com', 0)
+    def test_zero_exit_hostname_mismatch_rejected(self):
+        original_run = subprocess.run
+        def old_openssl(args, **kwargs):
+            if '-checkhost' in args:
+                return subprocess.CompletedProcess(args, 0,
+                    stdout='Hostname other.example.com does NOT match certificate\n', stderr='')
+            return original_run(args, **kwargs)
+        with mock.patch('certificate_check.subprocess.run', side_effect=old_openssl):
+            with self.assertRaises(ValueError):
+                check(self.cert, 'other.example.com', 0)
+    def test_zero_exit_unrecognized_hostname_result_rejected(self):
+        original_run = subprocess.run
+        for output in ('', 'unexpected output\n',
+                       'Hostname other.example.com does match certificate\n'):
+            with self.subTest(output=output):
+                def unexpected_openssl(args, **kwargs):
+                    if '-checkhost' in args:
+                        return subprocess.CompletedProcess(args, 0, stdout=output, stderr='')
+                    return original_run(args, **kwargs)
+                with mock.patch('certificate_check.subprocess.run', side_effect=unexpected_openssl):
+                    with self.assertRaises(ValueError):
+                        check(self.cert, 'sub.example.com', 0)
     def test_short_validity(self):
         with self.assertRaises(ValueError):
             check(self.cert, 'sub.example.com', 7)
