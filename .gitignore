@@ -42,3 +42,7 @@ member-bundles/
 *.o
 .DS_Store
 Thumbs.db
+
+dist/
+temp/
+*.egg-info/

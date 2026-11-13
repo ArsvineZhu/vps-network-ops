@@ -5,8 +5,9 @@ import socketserver
 import sqlite3
 import threading
 
-import observed_usage
 import pytest
+
+from vps_ops import observed_usage
 
 
 def snapshot(upload=10, download=20, user="owner"):
@@ -39,7 +40,7 @@ def test_usage_deduplicates_samples_and_keeps_scope():
 
 @pytest.mark.skipif(os.name == "nt", reason="Unix controller socket requires Linux")
 def test_sampler_records_failure_then_reads_the_unix_controller(tmp_path):
-    import usage_daemon
+    from vps_ops import usage_daemon
 
     path = tmp_path / "control.sock"
     calls = []

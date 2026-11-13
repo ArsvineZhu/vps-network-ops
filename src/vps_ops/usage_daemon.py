@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 
-from observed_usage import UnixHTTP, ingest, private_db, record_state
+from .observed_usage import UnixHTTP, ingest, private_db, record_state
 
 MAX_RESPONSE = 8 * 1024 * 1024
 MAX_DATABASE = 512 * 1024 * 1024

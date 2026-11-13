@@ -1,8 +1,9 @@
 import shutil
 import subprocess
 
-import certificate_check
 import pytest
+
+from vps_ops import certificate_check
 
 
 @pytest.mark.skipif(not shutil.which("openssl"), reason="OpenSSL is required")

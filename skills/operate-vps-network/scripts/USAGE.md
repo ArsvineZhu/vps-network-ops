@@ -1,15 +1,237 @@
-# 命令行工具
+# vps-ops 使用手册
 
-在仓库根目录执行。输入和输出中的客户端节点、认证信息和订阅链接应保存在受限目录。
+## 安装与运行位置
 
-```sh
-uv run python skills/operate-vps-network/scripts/clash_profile.py /private/node.json /private/profile.yaml --policy /etc/vps-rules/rules.yaml
-uv run python skills/operate-vps-network/scripts/new_member.py /private/server.json member /private/member --policy /etc/vps-rules/rules.yaml
-uv run python skills/operate-vps-network/scripts/subscription_policy.py /private/profile.yaml --policy system/subscriptions/rules.yaml
+本机需要 Python 3.12 及以上版本、uv 和 OpenSSH。在仓库根目录执行：
+
+```powershell
+uv sync --locked
+uv run vps-ops --help
 ```
 
-`clash_profile.py` 生成 Mihomo 客户端配置；`new_member.py` 生成独立用户身份、客户端配置及服务端用户条目。完整配置使用 `--policy` 指定共享规则；仅生成节点提供者时无需规则。`subscription_policy.py` 将规则配置应用于现有订阅，保留节点及其选择组。各工具的参数可用 `--help` 查看。
+本机可连接服务器、生成成员材料与客户端配置、处理订阅文件。系统检查、日志、服务控制、用量、DNS、软件更新和重启在 Ubuntu VPS 上执行。服务器安装见[部署指南](../../../docs/DEPLOYMENT.md#安装统一-cli)。服务器操作以 root 身份执行；普通 SSH 用户先登录系统终端，再运行 sudo vps-ops shell。
 
-节点描述格式见 `system/mihomo/server.example.json`。`new_member.py` 为新用户生成 UUID；`clash_profile.py` 使用已有用户的 UUID，需在输入中添加 `uuid` 字段。
+下面的 IP、域名和私有路径均为示例。替换为自己的配置；输入输出的父目录应已存在且只允许自己的账户访问。Linux 可用 install -d -m 0700 /private 创建目录；Windows 使用账户私有目录并检查 ACL。
 
-`observed_usage.py` 从私有控制套接字或快照采样；`usage_daemon.py` 运行连续采集并提供报告。结果是近似观察值。`certificate_check.py` 检查证书有效期和主机名；`wait_listener.py` 等待服务监听；`vps_snapshot.sh` 读取主机网络与服务状态。
+## 登录和连续操作
+
+本机运行：
+
+```powershell
+uv run vps-ops connect root@203.0.113.10 --port 23899
+```
+
+出现 vps-ops> 后，只输入子命令：
+
+```text
+status
+check
+usage report
+logs mihomo --since "1 hour ago" --lines 30
+help
+```
+
+每条命令结束后回到同一提示符，继续复用此次认证。exit 或 quit 退出。已登录普通 SSH 终端时，可执行 vps-ops shell 进入相同界面。
+
+| connect 参数    | 含义                                    |
+| --------------- | --------------------------------------- |
+| target          | SSH 配置别名、主机或用户@主机           |
+| --port PORT     | SSH 端口；省略时使用 OpenSSH 配置       |
+| --user USER     | SSH 用户                                |
+| --identity PATH | 本机密钥文件路径；空格路径加引号        |
+| --wait SECONDS  | 等待 SSH TCP 端口恢复后登录；默认不等待 |
+
+连接遵循本机 OpenSSH 配置和主机密钥验证，保活间隔 30 秒，连续失联 6 次后断开。安全密钥在登录时认证。远端必须已安装 vps-ops，且用户 PATH 能找到该命令。
+
+交互会话只接受工具子命令。需要编辑配置或任意系统命令时，保留普通 SSH 终端并直接调用 vps-ops。持续日志期间 Ctrl+C 会结束当前 CLI 进程，通过 connect 登录时需重新连接。
+
+## 服务器配置
+
+默认读取 /etc/vps-ops/config.yaml，格式为 UTF-8 YAML。下面是完整字段及默认值：
+
+```yaml
+subscription_host: sub.example.com
+subscription_port: 9443
+subscription_root: /srv/vps-subscriptions
+probe_url: https://www.cloudflare.com/
+frontend_config: /etc/mihomo/config.yaml
+services:
+  - mihomo
+  - mihomo-guard
+  - caddy
+  - tailscaled
+  - mihomo-observed
+  - tcpfp-network
+  - tcpfp-windows-test
+  - tcpfp-ios-test
+  - tcpfp-syn-windows
+  - tcpfp-syn-capture-windows
+  - vps-rules.path
+```
+
+只写需要覆盖的字段即可。subscription_host 必须改为真实订阅域名；subscription_port 为 Caddy HTTPS 端口；subscription_root 为订阅目录。probe_url 必须返回 HTTP 200。frontend_config 指向入口配置，供日志过滤读取已知认证值。services 若提供会替换整个默认列表，也决定服务控制和日志查询允许使用的名称。
+
+全局参数放在子命令之前：
+
+```sh
+vps-ops --config /private/ops.yaml status
+vps-ops --json check dns
+vps-ops --json usage report
+```
+
+JSON 支持 status、check、DNS 结果和 usage report。交互会话内写为 --json check。自定义服务器配置的会话从普通 SSH 终端启动：vps-ops --config /private/ops.yaml shell。connect 使用远端默认配置。
+
+## 状态和功能检查
+
+```sh
+vps-ops status
+vps-ops check
+vps-ops check dns
+vps-ops check proxy
+vps-ops check subscription
+vps-ops check certificate
+vps-ops check tailscale
+```
+
+status 汇总系统负载、内存、磁盘、TCP 监听、宿主路由、防火墙、失败单元、待更新包、服务状态、启动标识、最近 24 小时错误数和重启提示。报告中的“读取失败”表示该项采集未成功。
+
+check 默认等同 check all，单项失败后继续检查其他项：
+
+| 范围         | 实际检查                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| all          | 配置服务均 active，并执行以下全部检查                                                                   |
+| dns          | 两个网络空间解析 www.cloudflare.com，并访问 probe_url                                                   |
+| proxy        | 两个认证 SOCKS 出口、Windows 队列与捕获、iPhone eBPF，以及三个协议各一个订阅节点的临时客户端 HTTPS 请求 |
+| subscription | 对目录中每份 YAML 请求 /s/文件名，连接本机 Caddy，校验域名和 TLS，要求 HTTP 200                         |
+| certificate  | Mihomo 运行凭据中的证书主机名和有效期，要求剩余超过 7 天                                                |
+| tailscale    | 本机 Tailscale BackendState 为 Running                                                                  |
+
+结果显示“通过”或“失败”；JSON 每项包含 name、state、detail。check 成功返回 0，有失败返回 1。参数错误通常返回 2；底层命令可能保留自己的退出码。status 返回成功表示报告生成，仍需阅读其中的失败状态。
+
+完整检查使用项目当前部署：网络空间 tcpfp-windows-test 和 tcpfp-ios-test，指纹工具在 /usr/local/lib/tcpfp，Mihomo 在 /usr/local/bin/mihomo。两个后端须运行并提供 systemd 凭据；订阅中须有 vless、hysteria2、anytls 节点。临时客户端配置结束后删除。协议探测从服务器发起；设备到 VPS 的连接问题还需在对应设备重现。
+
+## 日志、服务和用量
+
+```sh
+vps-ops logs mihomo --since "1 hour ago" --lines 50
+vps-ops logs tcpfp-syn-windows --follow
+vps-ops service status mihomo
+vps-ops service restart mihomo
+vps-ops usage report
+vps-ops --json usage report
+```
+
+logs 默认最近 24 小时、最多 50 行；--since 使用 journalctl 时间表达式；--follow 持续输出。CLI 过滤入口配置中的已知认证值和 HTTP URL；系统日志仍按私有数据处理。
+
+service 支持 status、start、stop、restart，服务名使用配置条目，如 mihomo 或 vps-rules.path。修改入口配置后先在普通终端检查：
+
+```sh
+/usr/local/bin/mihomo -t -d /var/lib/mihomo -f /etc/mihomo/config.yaml
+vps-ops service restart mihomo
+vps-ops check proxy
+```
+
+用量字段：fresh 表示近期采样成功，last_success 为 UTC 时间，upload_bytes、download_bytes 为累计字节数；active_connections 在采样新鲜时是连接数，过期时为 null；ever_observed 表示用户是否曾被观察。近似计数保存在原有 SQLite 数据库。fresh 为 false 时查看 logs mihomo-observed，并确认控制套接字可用。
+
+usage serve [--config PATH] 由 systemd 运行采集器；usage report [--config PATH] 指定采集配置，默认 /etc/mihomo-observed/collector.json。已有采集服务运行时只调用 report。
+
+## DNS 诊断和修复
+
+```sh
+vps-ops dns diagnose
+vps-ops dns repair
+vps-ops check proxy
+```
+
+diagnose 检查默认解析与 HTTPS；repair 为两个空间写入 /etc/netns/空间名称/resolv.conf，指定 nameserver 1.1.1.1 和超时，再执行检查。指纹网络初始化也维护这些文件；宿主机解析配置保持原状。
+
+如果仍失败，普通终端运行 ip netns list，查询 vps-ops logs tcpfp-network。空间不存在时先处理初始化失败；空间存在时检查上游 DNS、公网和转发规则。不要将宿主机的 127.0.0.53 复制进空间。
+
+## 更新、重启和恢复
+
+```sh
+vps-ops check
+vps-ops packages list
+vps-ops packages upgrade
+vps-ops reboot
+```
+
+packages list 使用现有索引。upgrade 检查 dpkg、刷新索引、显示模拟结果，然后直接更新；禁止删除包，保留本地配置，遵循保留和分阶段发布策略。它不升级 Ubuntu 大版本、不自动清理。由包管理器管理的 Caddy 等也会按候选版本更新；独立安装的二进制不在更新范围。
+
+reboot 直接重启，SSH 断开。回到本机执行：
+
+```powershell
+uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
+```
+
+登录后运行 status、check、usage report。确认启动标识改变、失败服务为 0、出口和入口检查通过、订阅可读、fresh 为 true。--wait 只等待管理端口，服务恢复由 check 验证。
+
+按失败项查日志：初始化查 tcpfp-network，Windows 队列查 tcpfp-syn-windows，后端查 tcpfp-windows-test 或 tcpfp-ios-test，订阅查 caddy。修复后运行相应检查。
+
+## 生成客户端配置
+
+准备 /private/node.json：
+
+```json
+{
+  "server": "203.0.113.10",
+  "port": 8443,
+  "uuid": "11111111-1111-4111-8111-111111111111",
+  "servername": "www.example.com",
+  "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "short_id": "aabb",
+  "name": "My-VPS",
+  "fingerprint": "chrome"
+}
+```
+
+替换全部示例连接值。server 为公网 IP 或域名，servername 为 REALITY 的 TLS 主机名，public_key 为服务端 REALITY 公钥，uuid 为已注册用户身份。short_id 为偶数位十六进制，最长 16 位。name、fingerprint 可省略，默认 Private-VPS、chrome；指纹还支持 firefox、safari、ios、android、edge、random。不接受额外字段。
+
+复制 system/subscriptions/rules.yaml 到 /private/rules.yaml，填写 base-url、variables.server_ipv4、variables.ssh_port，策略说明见[订阅与规则](../../../docs/RULES.md)。运行：
+
+```sh
+vps-ops profile generate /private/node.json /private/profile.yaml --policy /private/rules.yaml
+vps-ops profile generate /private/node.json /private/provider.yaml --kind provider
+```
+
+默认 --kind profile 生成完整配置，必须提供 --policy；provider 只输出节点列表，可被其他配置引用。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
+
+## 创建成员材料
+
+模板沿用节点描述，去掉 uuid、name，只保留 server、port、servername、public_key、short_id 和可选 fingerprint：
+
+```sh
+vps-ops member create /private/server.json tablet /private/tablet --policy /private/rules.yaml
+```
+
+标签为 1 至 40 位字母、数字、下划线或连字符。输出目录必须不存在，父目录已存在。生成：
+
+| 文件                     | 用途                             |
+| ------------------------ | -------------------------------- |
+| profile.yaml             | 使用新 UUID 的完整配置           |
+| provider.yaml            | 同一身份的节点列表               |
+| server-user.pending.json | 待加入 VLESS listener 的用户对象 |
+| .gitignore               | 排除目录中的生成文件             |
+
+将 pending 文件的用户对象加入目标 VLESS listener 的 users，再按设备身份配置对应路由。运行 Mihomo 配置检查、重启服务，从客户端导入并测试。远程订阅另外按 Caddy 约定发布；此命令只生成本地材料。
+
+## 应用订阅策略
+
+```sh
+vps-ops subscription apply /private/profile.yaml --policy /private/rules.yaml
+vps-ops subscription apply /private/profile.yaml --policy /private/rules.yaml --output /private/updated.yaml
+vps-ops subscription apply --directory /srv/vps-subscriptions --policy /etc/vps-rules/rules.yaml
+```
+
+选择单文件或目录，目录处理其中所有 .yaml，不能配合 --output。省略 --output 时原位更新。保留节点和 node-group 指定的唯一选择组，替换其余组、规则源、规则和 hosts。写入采用原子替换，已有文件保留所有者与权限。更新后让客户端刷新订阅。
+
+## 证书文件和监听等待
+
+```sh
+vps-ops certificate check --cert /private/fullchain.pem --hostname sub.example.com --min-days 7
+vps-ops wait listener mihomo 8443 --seconds 10
+```
+
+证书文件检查需要 OpenSSL，验证首张证书主机名与有效期；--min-days 默认 7，范围 0 至 3650。实际 HTTPS 部署用 check subscription 验证。
+
+监听等待依赖 Linux、systemd、ss，要求 TCP 监听归属于指定服务当前 MainPID，不发起连接。--seconds 默认 10，范围大于 0 且不超过 120。controller check-directory 是服务启动前的内部检查，由服务单元调用。

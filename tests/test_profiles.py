@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import clash_profile
+from vps_ops import clash_profile
 
 
 def test_profile_routes_through_the_node():
@@ -21,7 +21,6 @@ def test_profile_routes_through_the_node():
 
 
 def test_member_generation_uses_a_distinct_identity(tmp_path):
-    script = Path(clash_profile.__file__).with_name("new_member.py")
     source = tmp_path / "server.json"
     source.write_text(
         json.dumps(
@@ -40,7 +39,7 @@ def test_member_generation_uses_a_distinct_identity(tmp_path):
         output = tmp_path / name
         policy = Path(__file__).parents[1] / "system/subscriptions/rules.yaml"
         result = subprocess.run(
-            [sys.executable, script, source, name, output, "--policy", policy],
+            [sys.executable, "-m", "vps_ops.new_member", source, name, output, "--policy", policy],
             capture_output=True,
             text=True,
         )

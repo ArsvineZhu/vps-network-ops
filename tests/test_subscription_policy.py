@@ -5,8 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import subscription_policy
 import yaml
+
+from vps_ops import subscription_policy
 
 
 def profile():
@@ -45,7 +46,7 @@ def test_cli_updates_profile_without_exposing_credentials(tmp_path):
     source.write_text(yaml.safe_dump(profile()), encoding="utf-8")
     source.chmod(0o640)
     result = subprocess.run(
-        [sys.executable, subscription_policy.__file__, source, "--policy", policy_path()],
+        [sys.executable, "-m", "vps_ops.subscription_policy", source, "--policy", policy_path()],
         capture_output=True,
         text=True,
     )

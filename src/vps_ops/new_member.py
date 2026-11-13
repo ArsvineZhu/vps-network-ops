@@ -8,8 +8,9 @@ import uuid
 from pathlib import Path
 
 import yaml
-from clash_profile import generate
-from subscription_policy import configure
+
+from .clash_profile import generate
+from .subscription_policy import configure
 
 
 def main():

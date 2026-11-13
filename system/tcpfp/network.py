@@ -6,6 +6,7 @@ import subprocess
 
 from engines import load as load_engines
 from engines import verify_runtime
+from resolver import repair
 
 
 def run(*args):
@@ -17,8 +18,9 @@ def fail(message):
 
 
 try:
+    repair()
     engines = load_engines()
-    namespaces = {x["name"] for x in json.loads(run("ip", "-j", "netns", "list"))}
+    namespaces = {x["name"] for x in json.loads(run("ip", "-j", "netns", "list") or "[]")}
     links = {x["ifname"] for x in json.loads(run("ip", "-j", "link", "show"))}
     tables = {
         (x["table"]["family"], x["table"]["name"])

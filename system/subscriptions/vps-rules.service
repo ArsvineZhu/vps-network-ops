@@ -6,7 +6,7 @@ Type=oneshot
 UMask=0077
 Environment=PYTHONNOUSERSITE=1
 UnsetEnvironment=PYTHONPATH PYTHONHOME
-ExecStart=/usr/bin/python3 /usr/local/lib/vps-rules/subscription_policy.py --policy /etc/vps-rules/rules.yaml --directory /srv/vps-subscriptions
+ExecStart=/usr/local/bin/vps-ops subscription apply --policy /etc/vps-rules/rules.yaml --directory /srv/vps-subscriptions
 NoNewPrivileges=yes
 PrivateNetwork=yes
 PrivateTmp=yes

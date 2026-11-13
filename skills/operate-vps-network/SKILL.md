@@ -7,6 +7,8 @@ description: 维护个人 VPS 的 Mihomo、TCP 指纹出口、Tailscale、HTTPS 
 
 根据用户任务读取实际配置和服务状态，复用现有 SSH 管理连接。配置与订阅包含凭据，不写入仓库、聊天或日志。
 
+常规运维使用统一 `vps-ops` 入口，先运行 `status`、`check`，再按故障范围查询日志或执行维护。已有普通 SSH 会话时在其中调用命令。`connect` 进入的 CLI 会话只接受子命令，需要编辑文件时使用普通 SSH 管理终端。
+
 - 组件和数据路径：[系统架构](../../docs/ARCHITECTURE.md)
 - 安装与配置：[部署指南](../../docs/DEPLOYMENT.md)
 - 服务、订阅、证书和统计：[日常运维](../../docs/OPERATIONS.md)

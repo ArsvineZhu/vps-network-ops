@@ -12,7 +12,7 @@
 | `system/mihomo/`                                  | Mihomo、防护、统计与证书的配置示例和服务单元 |
 | `system/caddy/`                                   | HTTPS 订阅服务配置示例                       |
 | `system/subscriptions/rules.yaml`                 | 订阅的策略组、规则源及匹配顺序               |
-| `skills/operate-vps-network/scripts/`             | 客户端配置、订阅策略、用量和诊断工具         |
+| `src/vps_ops/`                                    | 客户端配置、订阅策略、用量和诊断工具         |
 | `tests/`                                          | Python 行为测试                              |
 | `docs/`                                           | 架构、部署、运维、开发和网络资料             |
 

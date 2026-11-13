@@ -1,0 +1,3 @@
+subscription_host: sub.example.com
+subscription_port: 9443
+probe_url: https://www.cloudflare.com/

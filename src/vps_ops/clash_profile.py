@@ -11,7 +11,8 @@ import uuid
 from pathlib import Path
 
 import yaml
-from subscription_policy import configure
+
+from .subscription_policy import configure
 
 
 def generate(d):

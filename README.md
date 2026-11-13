@@ -13,7 +13,30 @@ Windows 指纹出口使用 NFQUEUE，iPhone 指纹出口使用 tc/eBPF。两者�
 - [网络资料](docs/materials/NETWORK.md)
 - [运维 Skill](skills/operate-vps-network/SKILL.md)
 
-开发环境需要 Python、uv、Go、Node.js、clang、libbpf、ShellCheck、shfmt 和 Caddy。在 Linux 或 WSL 中安装依赖后：
+## 使用运维工具
+
+本机需要 Python 3.12+、uv 和 OpenSSH。在仓库根目录运行：
+
+```powershell
+uv sync --locked
+uv run vps-ops connect root@203.0.113.10 --port 23899
+```
+
+将示例 IP 和端口换成自己的 SSH 目标。服务器须已安装 CLI，见[安装统一 CLI](docs/DEPLOYMENT.md#安装统一-cli)。登录后出现 `vps-ops>`，连续输入：
+
+```text
+status
+check
+usage report
+```
+
+`status` 查看系统和服务，`check` 验证实际代理出口、协议入口、DNS 和订阅，`usage report` 查看累计观察用量。后续命令复用当前登录，输入 `exit` 退出。在服务器普通终端直接使用 `vps-ops status` 等命令。
+
+[CLI 使用手册](skills/operate-vps-network/scripts/USAGE.md) 提供连接参数、服务器配置、全部子命令、输入文件示例和故障处理；[日常运维](docs/OPERATIONS.md) 提供更新、重启、恢复与配置修改步骤。
+
+## 开发
+
+开发环境另需 Go、Node.js、clang、libbpf、ShellCheck、shfmt 和 Caddy。在 Linux 或 WSL 中安装依赖后：
 
 ```sh
 uv sync --locked

@@ -8,7 +8,7 @@ CLANG ?= clang
 CADDY ?= caddy
 
 GO_DIR := system/tcpfp/mirage-syn
-SHELL_FILES := system/tcpfp/network.sh skills/operate-vps-network/scripts/vps_snapshot.sh system/mihomo/renew-credential-refresh.sh.in system/mihomo/vps-usage
+SHELL_FILES := system/tcpfp/network.sh system/mihomo/renew-credential-refresh.sh.in
 C_FILE := system/tcpfp/ebpf/syn_rewrite.c
 
 .PHONY: fmt lint typecheck build test check
@@ -43,7 +43,7 @@ build:
 	@mkdir -p build
 	cd $(GO_DIR) && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o ../../../build/mirage-syn ./cmd/mirage-syn
 	$(MAKE) -C system/tcpfp/ebpf CLANG=$(CLANG) OUTPUT=../../../build/syn_rewrite.o
-	PYTHONPYCACHEPREFIX=build/pycache $(UV) run python -m compileall -q system/tcpfp skills/operate-vps-network/scripts
+	PYTHONPYCACHEPREFIX=build/pycache $(UV) run python -m compileall -q system/tcpfp src/vps_ops
 
 test:
 	$(UV) run pytest
