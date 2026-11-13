@@ -1,0 +1,158 @@
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Disable SSH password authentication after key verification
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/00-vps-ops.conf
+        content: "PubkeyAuthentication yes\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n"
+        mode: "0644"
+        validate: /usr/sbin/sshd -t -f %s
+    - name: Give the managed SSH policy precedence
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        line: Include /etc/ssh/sshd_config.d/00-vps-ops.conf
+        insertbefore: BOF
+        validate: /usr/sbin/sshd -t -f %s
+    - name: Check effective SSH password policy
+      ansible.builtin.command: /usr/sbin/sshd -T
+      register: ssh_policy
+      changed_when: false
+      failed_when: "'passwordauthentication no' not in ssh_policy.stdout or 'kbdinteractiveauthentication no' not in ssh_policy.stdout"
+    - name: Reload SSH
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: reloaded
+    - name: Enable forwarding
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-vps-ops.conf
+        content: "net.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\n"
+        mode: "0644"
+    - name: Apply forwarding
+      ansible.builtin.command: sysctl --system
+      changed_when: false
+    - name: Add Tailscale signing key
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        mode: "0644"
+      when: node.mode != 'mihomo'
+    - name: Add Tailscale official source
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list
+        dest: /etc/apt/sources.list.d/tailscale.list
+        mode: "0644"
+      when: node.mode != 'mihomo'
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        fail_on_autoremove: true
+        force_apt_get: true
+        name: tailscale
+        update_cache: true
+      when: node.mode != 'mihomo'
+    - name: Open Tailscale UDP
+      ansible.builtin.command: ufw allow 41641/udp
+      changed_when: false
+      when: node.mode != 'mihomo'
+    - name: Allow tailnet management
+      ansible.builtin.command: ufw allow in on tailscale0
+      changed_when: false
+      when: node.mode != 'mihomo'
+    - name: Install proxy dependencies
+      ansible.builtin.apt:
+        fail_on_autoremove: true
+        force_apt_get: true
+        name:
+          [
+            caddy,
+            nftables,
+            iptables,
+            iproute2,
+            clang,
+            gcc,
+            libbpf-dev,
+            make,
+            tar,
+            openssl,
+          ]
+      when: node.mode != 'tailscale'
+    - name: Create proxy service group
+      ansible.builtin.group:
+        name: mihomo
+        system: true
+      when: node.mode != 'tailscale'
+    - name: Create proxy service account
+      ansible.builtin.user:
+        name: mihomo
+        group: mihomo
+        system: true
+        create_home: false
+        home: /var/lib/mihomo
+        shell: /usr/sbin/nologin
+      when: node.mode != 'tailscale'
+    - name: Set proxy directory ownership and access
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: /etc/mihomo, group: mihomo, mode: "0750" }
+        - { path: /etc/mihomo-observed, group: mihomo, mode: "0750" }
+        - { path: /etc/tcpfp, mode: "0700" }
+        - { path: /etc/vps-rules, mode: "0700" }
+        - { path: /usr/local/lib/tcpfp, mode: "0755" }
+        - { path: /usr/local/lib/tcpfp/ebpf, mode: "0755" }
+        - { path: /etc/caddy/certs, group: caddy, mode: "0750" }
+        - { path: /srv/vps-subscriptions, group: caddy, mode: "0750" }
+        - { path: /var/lib/mihomo, owner: mihomo, group: mihomo, mode: "0700" }
+        - {
+            path: /var/lib/mihomo/controller,
+            owner: mihomo,
+            group: mihomo,
+            mode: "0700",
+          }
+      when: node.mode != 'tailscale'
+    - name: Generate and install proxy components
+      ansible.builtin.command:
+        argv:
+          [
+            /opt/vps-ops/bin/python,
+            -m,
+            vps_ops.deploy.server,
+            prepare,
+            "{{ node.work }}",
+          ]
+      changed_when: false
+      when: node.mode != 'tailscale'
+    - name: Issue and install the DNS certificate
+      ansible.builtin.command:
+        argv:
+          [
+            /opt/vps-ops/bin/python,
+            -m,
+            vps_ops.deploy.server,
+            certificate,
+            "{{ node.work }}",
+          ]
+      changed_when: false
+      when: node.mode != 'tailscale'
+    - name: Start proxy services
+      ansible.builtin.command:
+        argv:
+          [
+            /opt/vps-ops/bin/python,
+            -m,
+            vps_ops.deploy.server,
+            start,
+            "{{ node.work }}",
+          ]
+      changed_when: false
+      when: node.mode != 'tailscale'
+    - name: Enable Tailscale
+      ansible.builtin.systemd_service:
+        name: tailscaled
+        enabled: true
+        state: started
+      when: node.mode != 'mihomo'

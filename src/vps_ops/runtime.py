@@ -20,7 +20,7 @@ SERVICES = [
 ]
 DEFAULT = {
     "services": SERVICES,
-    "probe_url": "https://www.cloudflare.com/",
+    "probe_url": "https://www.cloudflare.com/cdn-cgi/trace",
     "subscription_host": "sub.example.com",
     "subscription_port": 9443,
     "subscription_root": "/srv/vps-subscriptions",
@@ -36,7 +36,14 @@ def run(args, timeout=25, input=None):
 
 
 def config(path):
-    return DEFAULT | (yaml.safe_load(Path(path).read_text()) or {})
+    result = DEFAULT | (yaml.safe_load(Path(path).read_text()) or {})
+    if "mode" in result:
+        from .deploy.config import services
+
+        selected = services(result["mode"])
+        if "services" not in (yaml.safe_load(Path(path).read_text()) or {}):
+            result["services"] = selected
+    return result
 
 
 def emit(data, machine=False):
@@ -111,6 +118,7 @@ def filtered_logs(args, c):
                     if secret:
                         line = line.replace(secret, "[隐藏]")
                 line = re.sub(r"https?://[^\s\"']+", "[URL隐藏]", line)
+                line = re.sub(r"/s/[A-Za-z0-9_-]{43}[.]yaml", "/s/[隐藏].yaml", line)
                 print(line, end="", flush=True)
         return process.wait()
     finally:

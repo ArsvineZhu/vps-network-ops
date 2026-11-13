@@ -8,7 +8,7 @@ CLANG ?= clang
 CADDY ?= caddy
 
 GO_DIR := system/tcpfp/mirage-syn
-SHELL_FILES := system/tcpfp/network.sh system/mihomo/renew-credential-refresh.sh.in
+SHELL_FILES := system/tcpfp/network.sh system/mihomo/renew-credential-refresh.sh.in src/vps_ops/deploy/bootstrap.sh
 C_FILE := system/tcpfp/ebpf/syn_rewrite.c
 
 .PHONY: fmt lint typecheck build test check

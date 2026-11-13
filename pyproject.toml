@@ -3,7 +3,10 @@ name = "vps-network-ops"
 version = "0.1.0"
 description = "Personal VPS network operations"
 requires-python = ">=3.12"
-dependencies = ["PyYAML>=6.0.3,<7"]
+dependencies = [
+    "cryptography>=41",
+    "PyYAML>=6.0.3,<7",
+]
 
 [dependency-groups]
 dev = [
@@ -42,3 +45,6 @@ exclude = ["build", "temp", ".venv", "node_modules"]
 testpaths = ["tests"]
 pythonpath = ["system/tcpfp", "src"]
 addopts = "-ra"
+
+[tool.setuptools.package-data]
+"vps_ops.deploy" = ["*.yaml", "*.sh", "assets/**/*"]

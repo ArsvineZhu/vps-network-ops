@@ -1,5 +1,16 @@
 # vps-ops 使用手册
 
+## 新节点部署
+
+从出厂 Ubuntu 24.04 AMD64 起步：
+
+```powershell
+uv run vps-ops deploy init C:/private/node.yaml
+uv run vps-ops deploy apply C:/private/node.yaml
+```
+
+选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](../../../../docs/DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址。
+
 ## 安装与运行位置
 
 本机需要 Python 3.12 及以上版本、uv 和 OpenSSH。在仓库根目录执行：
@@ -9,7 +20,7 @@ uv sync --locked
 uv run vps-ops --help
 ```
 
-本机可连接服务器、生成成员材料与客户端配置、处理订阅文件。系统检查、日志、服务控制、用量、DNS、软件更新和重启在 Ubuntu VPS 上执行。服务器安装见[部署指南](../../../docs/DEPLOYMENT.md#安装统一-cli)。服务器操作以 root 身份执行；普通 SSH 用户先登录系统终端，再运行 sudo vps-ops shell。
+本机可连接服务器、生成成员材料与客户端配置、处理订阅文件。系统检查、日志、服务控制、用量、DNS、软件更新和重启在 Ubuntu VPS 上执行。服务器安装见[部署指南](../../../../docs/DEPLOYMENT.md)。服务器操作以 root 身份执行；普通 SSH 用户先登录系统终端，再运行 sudo vps-ops shell。
 
 下面的 IP、域名和私有路径均为示例。替换为自己的配置；输入输出的父目录应已存在且只允许自己的账户访问。Linux 可用 install -d -m 0700 /private 创建目录；Windows 使用账户私有目录并检查 ACL。
 
@@ -53,7 +64,7 @@ help
 subscription_host: sub.example.com
 subscription_port: 9443
 subscription_root: /srv/vps-subscriptions
-probe_url: https://www.cloudflare.com/
+probe_url: https://www.cloudflare.com/cdn-cgi/trace
 frontend_config: /etc/mihomo/config.yaml
 services:
   - mihomo
@@ -70,6 +81,8 @@ services:
 ```
 
 只写需要覆盖的字段即可。subscription_host 必须改为真实订阅域名；subscription_port 为 Caddy HTTPS 端口；subscription_root 为订阅目录。probe_url 必须返回 HTTP 200。frontend_config 指向入口配置，供日志过滤读取已知认证值。services 若提供会替换整个默认列表，也决定服务控制和日志查询允许使用的名称。
+
+自动部署还会写入 mode，取 tailscale、mihomo 或 both。mode 缺省时按 both 处理；未显式提供 services 时根据模式派生服务列表。check all 对未启用能力显示“跳过”，不会把未安装 Mihomo 或 Tailscale 当作故障。
 
 全局参数放在子命令之前：
 
@@ -106,7 +119,7 @@ check 默认等同 check all，单项失败后继续检查其他项：
 | certificate  | Mihomo 运行凭据中的证书主机名和有效期，要求剩余超过 7 天                                                |
 | tailscale    | 本机 Tailscale BackendState 为 Running                                                                  |
 
-结果显示“通过”或“失败”；JSON 每项包含 name、state、detail。check 成功返回 0，有失败返回 1。参数错误通常返回 2；底层命令可能保留自己的退出码。status 返回成功表示报告生成，仍需阅读其中的失败状态。
+结果显示“通过”“警告”“失败”或“跳过”；警告表示仍需操作，例如批准 Tailscale 出口能力。JSON 每项包含 name、state、detail。check 成功返回 0，有失败返回 1。参数错误通常返回 2；底层命令可能保留自己的退出码。status 返回成功表示报告生成，仍需阅读其中的失败状态。
 
 完整检查使用项目当前部署：网络空间 tcpfp-windows-test 和 tcpfp-ios-test，指纹工具在 /usr/local/lib/tcpfp，Mihomo 在 /usr/local/bin/mihomo。两个后端须运行并提供 systemd 凭据；订阅中须有 vless、hysteria2、anytls 节点。临时客户端配置结束后删除。协议探测从服务器发起；设备到 VPS 的连接问题还需在对应设备重现。
 
@@ -187,7 +200,7 @@ uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
 
 替换全部示例连接值。server 为公网 IP 或域名，servername 为 REALITY 的 TLS 主机名，public_key 为服务端 REALITY 公钥，uuid 为已注册用户身份。short_id 为偶数位十六进制，最长 16 位。name、fingerprint 可省略，默认 Private-VPS、chrome；指纹还支持 firefox、safari、ios、android、edge、random。不接受额外字段。
 
-复制 system/subscriptions/rules.yaml 到 /private/rules.yaml，填写 base-url、variables.server_ipv4、variables.ssh_port，策略说明见[订阅与规则](../../../docs/RULES.md)。运行：
+复制 system/subscriptions/rules.yaml 到 /private/rules.yaml，填写 base-url、variables.server_ipv4、variables.ssh_port，策略说明见[订阅与规则](../../../../docs/RULES.md)。运行：
 
 ```sh
 vps-ops profile generate /private/node.json /private/profile.yaml --policy /private/rules.yaml

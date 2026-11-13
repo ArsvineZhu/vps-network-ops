@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def get(*args):
-    return json.loads(subprocess.check_output(args, text=True))
+    return json.loads(subprocess.check_output(args, text=True) or "[]")
 
 
 def check():

@@ -5,10 +5,8 @@ import importlib
 import json
 import os
 import shlex
-import socket
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 from .checks import checks
@@ -27,6 +25,7 @@ def execute(argv):
     p.add_argument(
         "command",
         choices=[
+            "deploy",
             "connect",
             "shell",
             "status",
@@ -53,6 +52,11 @@ def execute(argv):
         a = p.parse_args(argv[: command_index + 1])
         rest = argv[command_index + 1 :]
     cmd = a.command
+    if cmd == "deploy":
+        from .deploy.client import main as deploy_main
+
+        deploy_main(rest)
+        return 0
     if cmd in ("member", "profile", "subscription", "certificate"):
         expected, module = {
             "member": ("create", "new_member"),
@@ -97,23 +101,12 @@ def execute(argv):
         cp.add_argument("--identity")
         cp.add_argument("--wait", type=float, default=0)
         x = cp.parse_args(rest)
-        args = ["ssh", "-tt", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=6"]
-        for flag, value in (("-p", x.port), ("-l", x.user), ("-i", x.identity)):
-            if value is not None:
-                args += [flag, str(value)]
+        from .transport import ssh_command, wait_ssh
+
+        args = ssh_command(x.target, port=x.port, user=x.user, identity=x.identity, tty=True)
         if x.wait:
-            info = run(["ssh", "-G", *args[2:], x.target])
-            opts = dict(line.split(" ", 1) for line in info.splitlines())
-            end = time.monotonic() + x.wait
-            while True:
-                try:
-                    with socket.create_connection((opts["hostname"], int(opts["port"])), timeout=2):
-                        break
-                except OSError:
-                    if time.monotonic() > end:
-                        raise RuntimeError("等待 SSH 超时") from None
-                    time.sleep(2)
-        return subprocess.call([*args, x.target, "vps-ops shell"])
+            wait_ssh(args, x.wait)
+        return subprocess.call([*args, "vps-ops shell"])
     if cmd == "shell":
         while True:
             try:

@@ -1,0 +1,58 @@
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install public management key
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        mode: "0700"
+    - name: Authorize management key
+      ansible.builtin.lineinfile:
+        path: /root/.ssh/authorized_keys
+        line: "{{ node.authorized_key }}"
+        create: true
+        mode: "0600"
+    - name: Install base packages and security update service
+      ansible.builtin.apt:
+        fail_on_autoremove: true
+        force_apt_get: true
+        install_recommends: false
+        name:
+          [
+            ufw,
+            curl,
+            ca-certificates,
+            gnupg,
+            unattended-upgrades,
+            python3-venv,
+            python3-yaml,
+            python3-cryptography,
+            systemd-timesyncd,
+          ]
+        update_cache: true
+        state: present
+        lock_timeout: 300
+    - name: Enable time synchronization
+      ansible.builtin.systemd_service:
+        name: systemd-timesyncd
+        enabled: true
+        state: started
+    - name: Upgrade without package removal
+      ansible.builtin.apt:
+        fail_on_autoremove: true
+        force_apt_get: true
+        upgrade: safe
+        dpkg_options: force-confold
+    - name: Enable periodic security updates
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: 'APT::Periodic::Update-Package-Lists "1"; APT::Periodic::Unattended-Upgrade "1";'
+        mode: "0644"
+    - name: Preserve SSH access before firewall activation
+      ansible.builtin.command:
+        argv: [ufw, allow, "{{ node.ssh_port }}/tcp"]
+      changed_when: false
+    - name: Enable the firewall before installing public services
+      ansible.builtin.command: ufw --force enable
+      changed_when: false

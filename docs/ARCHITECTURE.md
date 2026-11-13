@@ -22,4 +22,6 @@ Mihomo 的 UID 防火墙限制入口进程访问本机和私网，放行设备�
 
 Caddy 发布 HTTPS 订阅。DNS-01 证书由 acme.sh 续期，Mihomo 通过 systemd 凭据读取证书。用量采集器读取私有 Unix 控制套接字并保存近似计数，不保存访问目标。
 
-`vps-ops` 是统一管理入口。服务器本地执行检查与维护，Windows 本机通过原生 SSH 进入远程 CLI 长会话。部署检查配置位于 `/etc/vps-ops/config.yaml`，认证信息继续由现有服务配置与 systemd 凭据提供。用量与订阅策略服务调用同一 Python 包中的命令；离线成员材料和客户端配置生成也由该入口提供。操作及参数见 [CLI 手册](../skills/operate-vps-network/scripts/USAGE.md)。
+`vps-ops` 是统一管理入口。服务器本地执行检查与维护，Windows 本机通过原生 SSH 进入远程 CLI 长会话。部署检查配置位于 `/etc/vps-ops/config.yaml`，认证信息继续由现有服务配置与 systemd 凭据提供。用量与订阅策略服务调用同一 Python 包中的命令；离线成员材料和客户端配置生成也由该入口提供。操作及参数见 [CLI 手册](../.agents/skills/operate-vps-network/scripts/USAGE.md)。
+
+新节点支持仅 Tailscale、仅 Mihomo 和两者同装。`deploy apply` 经原生 SSH 传输安装包，在服务器以 Ansible 本地连接执行初始化，系统更新需要重启时重新连接继续。节点身份由生成模块持久保存，证书申请、安装和续期统一调用 acme.sh，DNS 服务商只配置插件与凭据。运行配置的 mode 决定服务列表与功能检查，省略 mode 的现有节点沿用两者同装。

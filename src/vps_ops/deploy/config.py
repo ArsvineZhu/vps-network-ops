@@ -1,0 +1,69 @@
+"""Fresh-node deployment input and capability ownership."""
+
+import ipaddress
+import re
+from pathlib import Path
+
+import yaml
+
+from vps_ops.runtime import SERVICES
+
+DNS = {
+    "cloudflare": ("dns_cf", ["CF_Token"]),
+    "aliyun": ("dns_ali", ["Ali_Key", "Ali_Secret"]),
+    "dnspod": ("dns_tencent", ["Tencent_SecretId", "Tencent_SecretKey"]),
+    "dnspod-token": ("dns_dp", ["DP_Id", "DP_Key"]),
+}
+MODES = ("tailscale", "mihomo", "both")
+
+
+def services(mode):
+    if mode not in MODES:
+        raise ValueError("mode 必须是 tailscale、mihomo 或 both")
+    return [
+        s
+        for s in SERVICES
+        if (s == "tailscaled" and mode != "mihomo") or (s != "tailscaled" and mode != "tailscale")
+    ]
+
+
+def load(path):
+    c = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(c, dict) or c.get("mode") not in MODES:
+        raise ValueError("部署模式无效")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]*", c.get("target", "")):
+        raise ValueError("SSH 目标无效")
+    if (
+        not isinstance(c.get("port", 22), int)
+        or isinstance(c.get("port", 22), bool)
+        or not 1 <= c.get("port", 22) <= 65535
+    ):
+        raise ValueError("SSH 端口无效")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", c.get("name", "vps-node")):
+        raise ValueError("节点名称应为不超过 63 位的小写字母、数字、连字符")
+    public = Path(c["public_key"]).expanduser()
+    c["authorized_key"] = public.read_text().strip()
+    if not re.fullmatch(
+        r"(?:ssh-|ecdsa-|sk-)[^\s]+ [A-Za-z0-9+/=]+(?: [^\n]*)?", c["authorized_key"]
+    ):
+        raise ValueError("需要 OpenSSH 公钥")
+    if c["mode"] != "tailscale":
+        ipaddress.IPv4Address(c["public_ipv4"])
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]+", c["domain"]):
+            raise ValueError("订阅域名无效")
+        if not isinstance(c.get("email"), str) or "@" not in c["email"]:
+            raise ValueError("需要 ACME 联系邮箱")
+        provider = c["dns_provider"]
+        plugin, names = DNS.get(provider, (provider, c.get("dns_credentials", [])))
+        if not re.fullmatch(r"dns_[a-zA-Z0-9_]+", plugin) or not names:
+            raise ValueError("需要 DNS 插件及凭据字段")
+        if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", n) for n in names):
+            raise ValueError("DNS 凭据字段无效")
+        c["dns_plugin"], c["dns_names"] = plugin, names
+    c.setdefault("name", "vps-node")
+    c.setdefault("port", 22)
+    if c.get("identity"):
+        c["identity"] = str(Path(c["identity"]).expanduser().resolve())
+    c["work"] = "/var/lib/vps-ops/deploy"
+    c["services"] = services(c["mode"])
+    return c

@@ -5,12 +5,18 @@ from pathlib import Path
 from .runtime import curl, run
 
 
-def checks(c, section):
+class CheckWarning(Exception):
+    pass
+
+
+def _checks(c, section):
     results = []
 
     def check(name, fn):
         try:
             results.append(dict(name=name, state="通过", detail=str(fn())))
+        except CheckWarning as exc:
+            results.append(dict(name=name, state="警告", detail=str(exc)))
         except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as e:
             results.append(
                 dict(
@@ -152,11 +158,9 @@ def checks(c, section):
         def cert():
             from .certificate_check import check
 
-            for p in Path("/run/credentials/mihomo.service").iterdir():
-                if run(["openssl", "x509", "-in", str(p), "-noout", "-subject"]):
-                    check(str(p), c["subscription_host"], 7)
-                    return run(["openssl", "x509", "-in", str(p), "-noout", "-dates"])
-            raise RuntimeError("证书不存在")
+            path = "/run/credentials/mihomo.service/tls-fullchain.pem"
+            check(path, c["subscription_host"], 7)
+            return run(["openssl", "x509", "-in", path, "-noout", "-dates"])
 
         check("证书", cert)
     if section in ("all", "tailscale"):
@@ -165,7 +169,34 @@ def checks(c, section):
             state = json.loads(run(["tailscale", "status", "--json"]))
             if state["BackendState"] != "Running":
                 raise RuntimeError("Tailscale " + state["BackendState"])
-            return "在线"
+            if c.get("mode") in ("tailscale", "both") and not state.get("Self", {}).get(
+                "ExitNodeOption", False
+            ):
+                raise CheckWarning("已登录，等待控制台批准出口节点")
+            return "在线，出口能力已批准" if c.get("mode") else "在线"
 
         check("Tailscale", ts)
     return results
+
+
+def checks(c, section):
+    mode = c.get("mode", "both")
+    enabled = (
+        ["tailscale"] if mode == "tailscale" else ["dns", "proxy", "subscription", "certificate"]
+    )
+    if mode == "both":
+        enabled.append("tailscale")
+    if section != "all":
+        if section not in enabled:
+            return [dict(name=section, state="跳过", detail="此节点未启用该能力")]
+        return _checks(c, section)
+    result = []
+    for unit in c["services"]:
+        try:
+            run(["systemctl", "is-active", unit])
+            result.append(dict(name=unit, state="通过", detail="active"))
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            result.append(dict(name=unit, state="失败", detail="服务未运行"))
+    for part in ("dns", "proxy", "subscription", "certificate", "tailscale"):
+        result.extend(checks(c, part))
+    return result

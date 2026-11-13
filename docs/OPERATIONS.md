@@ -1,6 +1,6 @@
 # 日常运维
 
-服务器已部署后的操作从这里开始。首次安装见[部署指南](DEPLOYMENT.md)，完整参数和文件格式见[CLI 使用手册](../skills/operate-vps-network/scripts/USAGE.md)。
+服务器已部署后的操作从这里开始。首次安装见[部署指南](DEPLOYMENT.md)，完整参数和文件格式见[CLI 使用手册](../.agents/skills/operate-vps-network/scripts/USAGE.md)。
 
 ## 连接并查看健康状态
 
@@ -81,7 +81,7 @@ uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
 
 ## 修改入口或添加用户
 
-入口配置在 /etc/mihomo/config.yaml。客户端和新用户材料的生成步骤见[CLI 手册](../skills/operate-vps-network/scripts/USAGE.md#创建成员材料)。每种设备使用独立身份，并将该设备的 UDP 规则放在其 TCP 出口规则之前。
+入口配置在 /etc/mihomo/config.yaml。客户端和新用户材料的生成步骤见[CLI 手册](../.agents/skills/operate-vps-network/scripts/USAGE.md)。每种设备使用独立身份，并将该设备的 UDP 规则放在其 TCP 出口规则之前。
 
 在普通 SSH 终端修改配置后检查，再重启：
 
