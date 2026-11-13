@@ -1,0 +1,22 @@
+[Unit]
+Description=Windows SYN capture
+After=tcpfp-network.service tcpfp-syn-windows.service
+Wants=tcpfp-syn-windows.service
+BindsTo=tcpfp-network.service
+Before=tcpfp-windows-test.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=PYTHONDONTWRITEBYTECODE=1
+NetworkNamespacePath=/run/netns/tcpfp-windows-test
+ExecStartPre=/usr/bin/systemctl is-active --quiet tcpfp-syn-windows.service
+ExecStartPre=/usr/bin/python3 /usr/local/lib/tcpfp/syn_preflight.py windows
+ExecStart=/usr/bin/python3 /usr/local/lib/tcpfp/syn_capture.py attach --config /etc/tcpfp/syn-windows.json
+ExecStop=/usr/bin/python3 /usr/local/lib/tcpfp/syn_capture.py detach --config /etc/tcpfp/syn-windows.json
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+[Install]
+WantedBy=multi-user.target

@@ -1,10 +1,18 @@
-# Private runtime data; prefer keeping it OUTSIDE this repository.
-/private/
-**/private/
-credentials/
-secrets/
+.venv/
+node_modules/
+build/
+temp/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Credentials, private profiles, state and local captures.
 .env
 .env.*
+private/
+credentials/
+secrets/
 *.pem
 *.key
 *.p12
@@ -18,7 +26,6 @@ id_ed25519*
 private-node.json
 public-template.json
 users.json
-# Generated profiles and member bundles (source templates remain tracked).
 profile.yaml
 provider.yaml
 categories.yaml
@@ -27,45 +34,11 @@ server-user.pending.json
 members/
 member-bundles/
 *-bundle/
-# Captures, databases, logs and local backups.
-snapshots/
-connections.json
-*connections*.json
-*snapshot*.json
-*.sqlite
-*.sqlite-*
-*.sqlite3
-*.sqlite3-*
-*.db
-*.db-*
+*.sqlite*
+*.db*
 *.log
-logs/
-*.pcap
-*.pcapng
-*.bak
-*.backup
+*.pcap*
 *.zip
-# Interpreter/editor/OS caches.
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.venv/
-venv/
+*.o
 .DS_Store
 Thumbs.db
-*.swp
-*~
-
-# Experimental executables and private reproductions; never package downloaded cores.
-/skills/operate-vps-network/experiments/**/mihomo-v1.19.33
-/skills/operate-vps-network/experiments/**/mihomo-*.gz
-/skills/operate-vps-network/experiments/**/private-run/
-
-# Unified system generated bundles and deploy inventories.
-/bundles/
-/generated/
-/system/output/
-/system/ansible/inventory/
-*.retry
-*.vault-password
-/system/tcpfp/ebpf/*.o

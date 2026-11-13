@@ -1,0 +1,34 @@
+mode: rule
+log-level: warning
+ipv6: false
+allow-lan: false
+find-process-mode: "off"
+tun:
+  enable: false
+listeners:
+  - name: fingerprint-socks
+    type: socks
+    listen: REPLACE_WITH_NAMESPACE_IPV4
+    port: 1080
+    users:
+      - username: REPLACE_WITH_PROFILE_NAME
+        password: REPLACE_WITH_BACKEND_PASSWORD
+dns:
+  enable: true
+  listen: 127.0.0.1:1053
+  ipv6: false
+  enhanced-mode: redir-host
+  nameserver:
+    - udp://1.1.1.1:53
+rules:
+  - IP-CIDR,0.0.0.0/8,REJECT
+  - IP-CIDR,10.0.0.0/8,REJECT
+  - IP-CIDR,100.64.0.0/10,REJECT
+  - IP-CIDR,127.0.0.0/8,REJECT
+  - IP-CIDR,169.254.0.0/16,REJECT
+  - IP-CIDR,172.16.0.0/12,REJECT
+  - IP-CIDR,192.168.0.0/16,REJECT
+  - IP-CIDR,198.18.0.0/15,REJECT
+  - IP-CIDR6,::/0,REJECT
+  - NETWORK,UDP,REJECT
+  - MATCH,DIRECT

@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "charliermarsh.ruff",
+    "detachhead.basedpyright",
+    "golang.go",
+    "timonwong.shellcheck",
+    "mkhl.shfmt",
+    "llvm-vs-code-extensions.vscode-clangd",
+    "omBratteng.nftables",
+    "matthewpi.caddyfile-support",
+    "esbenp.prettier-vscode",
+    "redhat.vscode-yaml"
+  ]
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=Apply shared subscription rules
+
+[Service]
+Type=oneshot
+UMask=0077
+Environment=PYTHONNOUSERSITE=1
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+ExecStart=/usr/bin/python3 /usr/local/lib/vps-rules/subscription_policy.py --policy /etc/vps-rules/rules.yaml --directory /srv/vps-subscriptions
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/vps-subscriptions

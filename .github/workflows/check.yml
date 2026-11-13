@@ -1,13 +1,50 @@
-name: Offline source checks
+name: Check
+
 on:
   push:
   pull_request:
+
 permissions:
   contents: read
+
 jobs:
-  test:
+  check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - name: Verify source without credentials or deployment
-        run: bash system/check.sh
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@v10
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: system/tcpfp/mirage-syn/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install development tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-format libbpf-dev shellcheck shfmt
+          uv sync --locked
+          npm ci --no-audit --no-fund
+          gh release download v2.11.9 --repo caddyserver/caddy --pattern 'caddy_*_linux_amd64.tar.gz' --output "$RUNNER_TEMP/caddy.tar.gz"
+          tar -xzf "$RUNNER_TEMP/caddy.tar.gz" -C "$RUNNER_TEMP" caddy
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Check and build
+        run: make check
+
+  server-python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked --python 3.12
+      - run: uv run --python 3.12 pytest

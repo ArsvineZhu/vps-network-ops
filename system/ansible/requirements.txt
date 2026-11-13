@@ -1,2 +1,0 @@
-# Use a virtual environment on the controller. No Galaxy collections needed.
-ansible-core>=2.19,<2.21

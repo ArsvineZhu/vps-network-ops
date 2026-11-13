@@ -1,1 +1,0 @@
-{"socket":"/var/lib/mihomo/controller/control.sock","db":"/var/lib/mihomo-observed/usage.sqlite","inbound":"REPLACE_WITH_ACTUAL_LISTENER_NAME","instance":"personal-vps","users":["REPLACE_WITH_ACTUAL_OWNER_LABEL","friend01"],"interval":5}

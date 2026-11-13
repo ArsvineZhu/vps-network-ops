@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/bin/python3 /usr/local/lib/mihomo-observed/usage_daemon.py --report --config /etc/mihomo-observed/collector.json

@@ -1,0 +1,10 @@
+{
+  "interface": "e0",
+  "syn": {
+    "enabled": true,
+    "queue_num": 4949,
+    "profile": "windows",
+    "failure_mode": "strict",
+    "status_interval": "30s"
+  }
+}

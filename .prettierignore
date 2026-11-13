@@ -1,0 +1,9 @@
+docs/agents/CONSTITUTION.zh-CN.md
+system/tcpfp/mirage-syn/licenses/
+uv.lock
+package-lock.json
+build/
+temp/
+.venv/
+.pytest_cache/
+.ruff_cache/

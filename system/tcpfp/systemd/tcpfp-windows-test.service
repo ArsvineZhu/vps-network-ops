@@ -1,0 +1,22 @@
+[Unit]
+Requires=tcpfp-network.service
+After=tcpfp-network.service
+Description=Windows TCP fingerprint backend
+[Service]
+Type=simple
+DynamicUser=yes
+RuntimeDirectory=tcpfp-windows-test
+NetworkNamespacePath=/run/netns/tcpfp-windows-test
+LoadCredential=config.json:/etc/tcpfp/windows.json
+ExecStart=/usr/local/lib/tcpfp/mihomo -d /run/tcpfp-windows-test -f %d/config.json
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_UNIX
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

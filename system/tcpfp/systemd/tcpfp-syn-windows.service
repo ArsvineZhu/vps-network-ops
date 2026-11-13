@@ -1,0 +1,19 @@
+[Unit]
+Description=Windows SYN queue
+After=tcpfp-network.service
+BindsTo=tcpfp-network.service
+Before=tcpfp-syn-capture-windows.service
+[Service]
+Type=notify
+NotifyAccess=main
+NetworkNamespacePath=/run/netns/tcpfp-windows-test
+ExecStart=/usr/local/lib/tcpfp/mirage-syn run -c /etc/tcpfp/syn-windows.json
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+[Install]
+WantedBy=multi-user.target

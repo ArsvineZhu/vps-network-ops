@@ -1,8 +1,11 @@
-# TCP SYN 模板源码
+# TCP 指纹出口
 
-- 源自 2026-11-12 的修复后集成材料，只收录源码和测试，不复制实例地址、凭据和临时配置。
-- `ebpf/syn_rewrite.c` 保留 MSS/WS/TS 值及实际协商，仅重排支持的 SYN options。
-- 此模块不能把 Linux 完整变成 Windows/iOS，不能修改 UDP/QUIC 指纹，也不能改变 IP/ASN 信誉。
-- 历史现场已报告 Windows/iOS 两出口完成公网 VLESS 路径验证；本仓库构建测试不会重新证明现场长期稳定。
-- 无特权检查：`bash tests/run.sh`。真正加载 tc/eBPF 需要独立获批主机，不能用普通容器隔离宿主内核。
-- 源码没有附带上游开源许可证，当前仓库也未自行添加许可证。发布为公开开源前须确认来源与再分发权利。
+两个网络空间分别运行 Windows 和 iPhone 的 Mihomo SOCKS 后端。Windows 出口通过 NFQUEUE 调整 IPv4 TCP SYN 选项；iPhone 出口使用 tc/eBPF。设备认证与出口选择由前端 Mihomo 负责。
+
+`fingerprint-engines.json` 定义各出口使用的引擎。`syn-windows.json` 定义 Windows 的队列、模板和故障策略。`network.py` 启动网络或检查现有网络，`network.sh` 创建网络空间和转发规则；`render_assets.py` 按服务器地址和出口网卡生成 nftables 配置。
+
+```sh
+python3 system/tcpfp/render_assets.py --public-ipv4 "$SERVER_IPV4" --wan "$WAN" --output /private/tcpfp-network
+```
+
+NFQUEUE 进程及其依赖许可见 [mirage-syn](mirage-syn/README.md)。服务单元位于 `systemd/`。后端的密码和服务端认证身份只放在 `/etc/tcpfp` 和 `/etc/mihomo`。

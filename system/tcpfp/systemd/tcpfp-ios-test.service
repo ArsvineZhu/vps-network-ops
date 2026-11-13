@@ -1,0 +1,22 @@
+[Unit]
+Requires=tcpfp-network.service
+After=tcpfp-network.service
+Description=iPhone TCP fingerprint backend
+[Service]
+Type=simple
+DynamicUser=yes
+RuntimeDirectory=tcpfp-ios-test
+NetworkNamespacePath=/run/netns/tcpfp-ios-test
+LoadCredential=config.json:/etc/tcpfp/ios.json
+ExecStart=/usr/local/lib/tcpfp/mihomo -d /run/tcpfp-ios-test -f %d/config.json
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_UNIX
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

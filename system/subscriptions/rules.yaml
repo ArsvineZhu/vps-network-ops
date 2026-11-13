@@ -1,0 +1,320 @@
+# 服务端订阅地址；将域名改为自己的订阅域名。
+base-url: https://subscription.example.com:9443
+node-group: VPS-Select
+variables:
+  server_ipv4: 203.0.113.1
+  ssh_port: 23899
+hosts:
+  ${subscription_host}: ${server_ipv4}
+
+defaults:
+  domain-mrs: &domain-mrs
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    proxy: DIRECT
+  ip-mrs: &ip-mrs
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    proxy: DIRECT
+  classical-yaml: &classical-yaml
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    proxy: DIRECT
+  classical-text: &classical-text
+    type: http
+    behavior: classical
+    format: text
+    interval: 86400
+    proxy: DIRECT
+  domain-yaml: &domain-yaml
+    type: http
+    behavior: domain
+    format: yaml
+    interval: 86400
+    proxy: DIRECT
+
+proxy-groups:
+  - { name: GitHub, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: YouTube, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Google, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Telegram, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Netflix, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Disney, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Spotify, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Bilibili, type: select, proxies: [DIRECT, VPS-Select] }
+  - { name: China, type: select, proxies: [DIRECT, VPS-Select] }
+  - { name: Private, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: OpenAI, type: select, proxies: [VPS-Select, DIRECT] }
+  - name: Anthropic-直连（仅 TCP）
+    type: select
+    proxies: [DIRECT]
+    disable-udp: true
+    hidden: true
+  - name: Anthropic
+    type: select
+    proxies: [REJECT, VPS-Select, Anthropic-直连（仅 TCP）]
+    default-selected: REJECT
+  - { name: Google AI, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Grok, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: AI-Coding, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: AI-Other, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Steam, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: 游戏, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: 游戏下载, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: 开发, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Apple, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Microsoft, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Linux, type: select, proxies: [VPS-Select, DIRECT] }
+
+rule-providers:
+  # 少量本地规则可在这里维护；其余内容由上游规则集更新。
+  openai-custom:
+    type: inline
+    behavior: domain
+    payload:
+      - +.ct.sendgrid.net
+      - +.intercom.io
+      - +.intercomcdn.com
+      - cdn.openaimerge.com
+      - cdn.workos.com
+      - challenges.cloudflare.com
+      - forwarder.workos.com
+      - frontend-apps-multi-region.workos.com
+      - humb.apple.com
+      - images.workoscdn.com
+      - js.stripe.com
+      - o207216.ingest.sentry.io
+      - o33249.ingest.sentry.io
+      - rum.browser-intake-datadoghq.com
+      - setup.workos.com
+      - workos.imgix.net
+  ads:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs,
+    }
+  anthropic:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs,
+    }
+  openai:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs,
+    }
+  google-ai:
+    {
+      <<: *classical-yaml,
+      url: /rules/VPSDance/ai-proxy-rules/main/rules/clash/google-ai.yaml,
+    }
+  cursor:
+    {
+      <<: *classical-yaml,
+      url: /rules/VPSDance/ai-proxy-rules/main/rules/clash/cursor.yaml,
+    }
+  x-ai:
+    {
+      <<: *classical-yaml,
+      url: /rules/VPSDance/ai-proxy-rules/main/rules/clash/x-ai.yaml,
+    }
+  copilot:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/github-copilot.mrs,
+    }
+  ai-other:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs,
+    }
+  github:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs,
+    }
+  youtube:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs,
+    }
+  google:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs,
+    }
+  telegram:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs,
+    }
+  telegram-ip:
+    {
+      <<: *ip-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs,
+    }
+  netflix:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs,
+    }
+  disney:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs,
+    }
+  spotify:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs,
+    }
+  bilibili:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs,
+    }
+  steam:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs,
+    }
+  steam-cn:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam@cn.mrs,
+    }
+  epicgames:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs,
+    }
+  blizzard:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/blizzard.mrs,
+    }
+  game-download:
+    {
+      <<: *classical-text,
+      url: /rules/ACL4SSR/ACL4SSR/master/Clash/Ruleset/GameDownload.list,
+    }
+  docker:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/docker.mrs,
+    }
+  developer:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-dev.mrs,
+    }
+  apple:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs,
+    }
+  apple-cn:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs,
+    }
+  microsoft:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs,
+    }
+  microsoft-cn:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft@cn.mrs,
+    }
+  linux-canonical:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/canonical.mrs,
+    }
+  linux-debian:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/debian.mrs,
+    }
+  linux-archlinux:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/archlinux.mrs,
+    }
+  linux-fedora:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/fedora.mrs,
+    }
+  private:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs,
+    }
+  cn:
+    {
+      <<: *domain-mrs,
+      url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs,
+    }
+  geoip-cn:
+    { <<: *ip-mrs, url: /rules/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs }
+  loyal-proxy:
+    { <<: *domain-yaml, url: /rules/Loyalsoldier/clash-rules/release/proxy.txt }
+  loyal-direct:
+    {
+      <<: *domain-yaml,
+      url: /rules/Loyalsoldier/clash-rules/release/direct.txt,
+    }
+
+rules:
+  - "AND,((IP-CIDR,${server_ipv4}/32,no-resolve),(DST-PORT,${ssh_port}),(NETWORK,TCP)),DIRECT"
+  - "AND,((IP-CIDR,${server_ipv4}/32,no-resolve),(DST-PORT,${subscription_port}),(NETWORK,TCP)),DIRECT"
+  - "AND,((NETWORK,TCP),(RULE-SET,openai-custom)),OpenAI"
+  - "RULE-SET,ads,REJECT"
+  - "RULE-SET,anthropic,Anthropic"
+  - "NETWORK,udp,VPS-Select"
+  - "NETWORK,udp,REJECT"
+  - "RULE-SET,openai,OpenAI"
+  - "RULE-SET,google-ai,Google AI"
+  - "RULE-SET,cursor,AI-Coding"
+  - "RULE-SET,copilot,AI-Coding"
+  - "RULE-SET,x-ai,Grok"
+  - "RULE-SET,ai-other,AI-Other"
+  - "RULE-SET,github,GitHub"
+  - "RULE-SET,youtube,YouTube"
+  - "RULE-SET,google,Google"
+  - "RULE-SET,telegram,Telegram"
+  - "RULE-SET,telegram-ip,Telegram,no-resolve"
+  - "RULE-SET,netflix,Netflix"
+  - "RULE-SET,disney,Disney"
+  - "RULE-SET,spotify,Spotify"
+  - "RULE-SET,bilibili,Bilibili"
+  - "RULE-SET,game-download,游戏下载"
+  - "RULE-SET,steam-cn,游戏下载"
+  - "RULE-SET,steam,Steam"
+  - "RULE-SET,epicgames,游戏"
+  - "RULE-SET,blizzard,游戏"
+  - "RULE-SET,docker,开发"
+  - "RULE-SET,developer,开发"
+  - "RULE-SET,apple-cn,DIRECT"
+  - "RULE-SET,microsoft-cn,DIRECT"
+  - "RULE-SET,apple,Apple"
+  - "RULE-SET,microsoft,Microsoft"
+  - "RULE-SET,linux-canonical,Linux"
+  - "RULE-SET,linux-debian,Linux"
+  - "RULE-SET,linux-archlinux,Linux"
+  - "RULE-SET,linux-fedora,Linux"
+  - "RULE-SET,private,Private"
+  - "RULE-SET,loyal-proxy,VPS-Select"
+  - "RULE-SET,loyal-direct,China"
+  - "RULE-SET,cn,China"
+  - "RULE-SET,geoip-cn,China,no-resolve"
+  - "MATCH,VPS-Select"

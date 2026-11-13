@@ -1,0 +1,37 @@
+[project]
+name = "vps-network-ops"
+version = "0.1.0"
+description = "Personal VPS network operations"
+requires-python = ">=3.12"
+dependencies = ["PyYAML>=6.0.3,<7"]
+
+[dependency-groups]
+dev = [
+  "basedpyright>=1.40.2,<2",
+  "pytest>=9.2,<10",
+  "ruff>=0.17.5,<1",
+  "types-PyYAML>=6.0.12.20261113,<7",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["build", "temp"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.basedpyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+include = ["system/tcpfp", "skills/operate-vps-network/scripts", "tests"]
+extraPaths = ["system/tcpfp", "skills/operate-vps-network/scripts"]
+exclude = ["build", "temp", ".venv", "node_modules"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["system/tcpfp", "skills/operate-vps-network/scripts"]
+addopts = "-ra"

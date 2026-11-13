@@ -1,0 +1,37 @@
+{
+	admin off
+	auto_https off
+}
+
+https://REPLACE_WITH_SUBSCRIPTION_DOMAIN:9443 {
+	tls /etc/caddy/certs/REPLACE_WITH_DOMAIN/current/fullchain.pem /etc/caddy/certs/REPLACE_WITH_DOMAIN/current/key.pem
+	@subscription {
+		path_regexp subscription ^/s/[A-Za-z0-9_-]{43}[.]yaml$
+		method GET HEAD
+	}
+	handle @subscription {
+		header Cache-Control "no-store"
+		header Referrer-Policy "no-referrer"
+		header Profile-Update-Interval "24"
+		root * /srv/vps-subscriptions
+		uri strip_prefix /s
+		file_server
+	}
+	@rule_resources {
+		method GET HEAD
+		path /rules/MetaCubeX/meta-rules-dat/* /rules/VPSDance/ai-proxy-rules/* /rules/ACL4SSR/ACL4SSR/* /rules/Loyalsoldier/clash-rules/*
+	}
+	handle @rule_resources {
+		uri strip_prefix /rules
+		reverse_proxy https://raw.githubusercontent.com {
+			header_up -Cookie
+			header_up -Authorization
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+		}
+	}
+	handle {
+		respond 404
+	}
+}

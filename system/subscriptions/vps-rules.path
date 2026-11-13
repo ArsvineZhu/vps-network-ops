@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch shared subscription rules
+
+[Path]
+PathChanged=/etc/vps-rules/rules.yaml
+Unit=vps-rules.service
+
+[Install]
+WantedBy=multi-user.target

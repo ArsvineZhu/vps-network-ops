@@ -1,0 +1,14 @@
+[Unit]
+Description=Persistent per-device TCP fingerprint network
+Wants=network-online.target
+Requires=ufw.service mihomo-guard.service
+After=network-online.target ufw.service mihomo-guard.service
+Before=tcpfp-windows-test.service tcpfp-ios-test.service mihomo.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /usr/local/lib/tcpfp/network.py
+TimeoutStartSec=90
+[Install]
+WantedBy=multi-user.target
