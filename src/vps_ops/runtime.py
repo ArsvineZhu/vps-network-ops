@@ -46,21 +46,6 @@ def config(path):
     return result
 
 
-def emit(data, machine=False):
-    if machine:
-        print(json.dumps(data, ensure_ascii=False))
-    elif isinstance(data, list):
-        for item in data:
-            print(f"[{item['state']}] {item['name']}: {item['detail']}")
-    elif isinstance(data, dict):
-        for key, value in data.items():
-            print(
-                f"{key}: {value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)}"
-            )
-    else:
-        print(data)
-
-
 def resolver():
     sys.path.insert(0, "/usr/local/lib/tcpfp")
     from resolver import repair
@@ -90,8 +75,10 @@ def curl(url, proxy=None, auth=None, resolve=None):
     return "HTTP 200"
 
 
-def filtered_logs(args, c):
+def filtered_logs(args, c, *, machine=False):
     import re
+
+    from .output import format_log
 
     secrets = set()
 
@@ -110,16 +97,43 @@ def filtered_logs(args, c):
     path = Path(c["frontend_config"])
     if path.exists():
         collect(yaml.safe_load(path.read_text()))
+
+    def redact(value):
+        for secret in secrets:
+            if secret:
+                value = value.replace(secret, "[隐藏]")
+                value = value.replace(json.dumps(secret, ensure_ascii=False)[1:-1], "[隐藏]")
+        value = re.sub(r"https?://[^\s\"']+", "[URL隐藏]", value)
+        return re.sub(r"/s/[A-Za-z0-9_-]{43}[.]yaml", "/s/[隐藏].yaml", value)
+
+    def redact_tree(value):
+        if isinstance(value, dict):
+            return {redact(str(key)): redact_tree(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [redact_tree(item) for item in value]
+        if isinstance(value, str):
+            if value.lstrip().startswith(("{", "[")):
+                try:
+                    embedded = json.loads(value)
+                except ValueError:
+                    pass
+                else:
+                    return json.dumps(redact_tree(embedded), ensure_ascii=False)
+            return redact(value)
+        return value
+
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         if process.stdout is not None:
             for line in process.stdout:
-                for secret in secrets:
-                    if secret:
-                        line = line.replace(secret, "[隐藏]")
-                line = re.sub(r"https?://[^\s\"']+", "[URL隐藏]", line)
-                line = re.sub(r"/s/[A-Za-z0-9_-]{43}[.]yaml", "/s/[隐藏].yaml", line)
-                print(line, end="", flush=True)
+                if machine:
+                    try:
+                        record = json.loads(line)
+                    except ValueError:
+                        record = {"message": line.rstrip()}
+                    print(json.dumps(redact_tree(record), ensure_ascii=False), flush=True)
+                else:
+                    print(format_log(line, redact), end="", flush=True)
         return process.wait()
     finally:
         if process.poll() is None:

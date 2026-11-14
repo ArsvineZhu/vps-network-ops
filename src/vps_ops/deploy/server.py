@@ -12,7 +12,8 @@ from pathlib import Path
 
 from vps_ops.checks import checks
 from vps_ops.deploy.render import render, save
-from vps_ops.runtime import DEFAULT, emit, run
+from vps_ops.output import emit
+from vps_ops.runtime import DEFAULT, run
 
 from .components import ACME, GO, MIHOMO, command, download, install
 

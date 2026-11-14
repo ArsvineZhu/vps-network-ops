@@ -157,7 +157,6 @@ def report(db, c):
         else {}
     )
     return {
-        "kind": "approximate-observed-usage-not-billing",
         "latest_state": latest,
         "last_success": last_ok[0] if last_ok else None,
         "fresh": fresh,

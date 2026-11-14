@@ -201,7 +201,7 @@ def apply(path):
     raise RuntimeError("节点持续要求重启，请检查系统更新")
 
 
-def main(args):
+def main(args, *, machine=False):
     p = argparse.ArgumentParser(
         prog="vps-ops deploy", description="初始化并部署全新 Ubuntu 24.04 AMD64 节点"
     )
@@ -211,12 +211,16 @@ def main(args):
         help="init 创建配置；apply 部署并保留登录；show 查看私有结果",
     )
     p.add_argument("config", help="init/apply 的私有 YAML 路径；show 使用 subscriptions")
+    p.add_argument("--json", action="store_true", help="以 JSON 显示订阅地址")
     a = p.parse_args(args)
     if a.action == "init":
         init(a.config)
     elif a.action == "apply":
         apply(a.config)
     elif a.config == "subscriptions":
-        print(Path("/etc/vps-ops/subscriptions.json").read_text())
+        from vps_ops.output import emit
+
+        data = json.loads(Path("/etc/vps-ops/subscriptions.json").read_text())
+        emit(data, machine or a.json, view="subscriptions")
     else:
         p.error("show 仅支持 subscriptions")

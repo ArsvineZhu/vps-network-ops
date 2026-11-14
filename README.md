@@ -40,9 +40,9 @@ check
 usage report
 ```
 
-`status` 查看系统和服务，`check` 验证实际代理出口、协议入口、DNS 和订阅，`usage report` 查看累计观察用量。后续命令复用当前登录，输入 `exit` 退出。在服务器普通终端直接使用 `vps-ops status` 等命令。
+`status` 显示系统和服务概览；`status --all` 查看完整状态，`status --service mihomo` 单独查看一个服务。`check` 验证代理出口、协议入口、DNS 和订阅，`usage report` 查看累计观察用量。后续命令复用当前登录，输入 `exit` 退出。在服务器普通终端直接使用 `vps-ops status` 等命令。
 
-[CLI 使用手册](.agents/skills/operate-vps-network/scripts/USAGE.md) 提供连接参数、服务器配置、全部子命令、输入文件示例和故障处理；[日常运维](docs/OPERATIONS.md) 提供更新、重启、恢复与配置修改步骤。
+[CLI 使用手册](docs/USAGE.md) 提供连接参数、服务器配置、全部子命令、输入文件示例和故障处理；[日常运维](docs/OPERATIONS.md) 提供更新、重启、恢复与配置修改步骤。
 
 ## 开发
 

@@ -1,6 +1,6 @@
 # 日常运维
 
-服务器已部署后的操作从这里开始。首次安装见[部署指南](DEPLOYMENT.md)，完整参数和文件格式见[CLI 使用手册](../.agents/skills/operate-vps-network/scripts/USAGE.md)。
+服务器已部署后的操作从这里开始。首次安装见[部署指南](DEPLOYMENT.md)，完整参数和文件格式见[CLI 使用手册](USAGE.md)。
 
 ## 连接并查看健康状态
 
@@ -18,7 +18,7 @@ check
 usage report
 ```
 
-status 查看资源、服务状态、失败单元和是否需要重启；check 验证两个指纹出口、三个协议入口、DNS、订阅、证书和 Tailscale。确认检查全部通过，用量 fresh 为 true。后续操作复用当前登录，输入 exit 才退出。
+status 默认显示系统、资源和服务概览；需要全部信息使用 `status --all`，单独查服务可用 `status --service mihomo`。check 验证两个指纹出口、三个协议入口、DNS、订阅、证书和 Tailscale。确认检查全部通过，用量数据状态正常。后续操作复用当前登录，输入 exit 才退出。
 
 已在普通 SSH 终端登录时，直接运行 vps-ops status、vps-ops check，无需新建连接。以下代码块均为普通服务器终端命令；在 CLI 提示符下省略 vps-ops 前缀。
 
@@ -65,7 +65,7 @@ vps-ops packages upgrade
 vps-ops status
 ```
 
-更新命令会刷新索引并直接安装当前发行版的候选更新，保留本地配置、禁止删除包。Ubuntu 分阶段更新可能暂时保留部分软件；不执行大版本升级和自动清理。确认更新成功，并从 status 记下启动标识后执行：
+更新命令会刷新索引并直接安装当前发行版的候选更新，保留本地配置、禁止删除包。Ubuntu 分阶段更新可能暂时保留部分软件；不执行大版本升级和自动清理。确认更新成功，并从 `status --system` 记下启动标识后执行：
 
 ```sh
 vps-ops reboot
@@ -77,11 +77,11 @@ SSH 断开后，在本机重新连接一次：
 uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
 ```
 
-登录后运行 status、check、usage report。启动标识应改变，失败服务应为 0，所有检查通过，用量采样恢复。端口恢复后其他服务可能仍在启动，按失败项查询日志并处理。检查完成后保留登录，供后续操作使用。
+登录后运行 `status --system`、`check`、`usage report`。启动标识应改变，失败服务应为 0，所有检查通过，用量采样恢复。端口恢复后其他服务可能仍在启动，按失败项查询日志并处理。检查完成后保留登录，供后续操作使用。
 
 ## 修改入口或添加用户
 
-入口配置在 /etc/mihomo/config.yaml。客户端和新用户材料的生成步骤见[CLI 手册](../.agents/skills/operate-vps-network/scripts/USAGE.md)。每种设备使用独立身份，并将该设备的 UDP 规则放在其 TCP 出口规则之前。
+入口配置在 /etc/mihomo/config.yaml。客户端和新用户材料的生成步骤见[CLI 手册](USAGE.md)。每种设备使用独立身份，并将该设备的 UDP 规则放在其 TCP 出口规则之前。
 
 在普通 SSH 终端修改配置后检查，再重启：
 

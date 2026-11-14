@@ -123,7 +123,7 @@ sudoedit /etc/vps-ops/config.yaml
 vps-ops --help
 ```
 
-将 `subscription_host` 改为真实订阅域名，端口按 Caddy 的实际配置填写。全部配置字段见 [CLI 手册](../.agents/skills/operate-vps-network/scripts/USAGE.md)。该配置必须存在才能运行服务器检查。普通 SSH 用户执行管理命令时使用 sudo；`connect` 直接进入远程 CLI，因此需要可执行这些管理操作的登录账户。
+将 `subscription_host` 改为真实订阅域名，端口按 Caddy 的实际配置填写。全部配置字段见 [CLI 手册](USAGE.md)。该配置必须存在才能运行服务器检查。普通 SSH 用户执行管理命令时使用 sudo；`connect` 直接进入远程 CLI，因此需要可执行这些管理操作的登录账户。
 
 以上为首次安装。更新已有 CLI 时只执行 pip 的安装命令并加 `--upgrade`，保留已有配置；随后重启 `mihomo-observed`，让采集器加载新代码。若 `/usr/local/bin/vps-ops` 已存在，先用 `ls -l` 确认安装位置，使用其对应 Python 环境更新，避免覆盖其他安装。
 
@@ -220,4 +220,4 @@ sudo systemctl enable --now tcpfp-windows-test tcpfp-ios-test mihomo
 sudo systemctl enable --now mihomo-observed caddy tailscaled
 ```
 
-服务启动后运行 `sudo vps-ops check` 和 `sudo vps-ops usage report`。完整检查需要订阅目录已有三种协议的实际节点；订阅准备方法见 [CLI 手册](../.agents/skills/operate-vps-network/scripts/USAGE.md)。确认所有检查通过、用量 fresh 为 true，再从真实设备验证连接和订阅刷新。日常更新与重启见[日常运维](OPERATIONS.md)。
+服务启动后运行 `sudo vps-ops check` 和 `sudo vps-ops usage report`。完整检查需要订阅目录已有三种协议的实际节点；订阅准备方法见 [CLI 手册](USAGE.md)。确认所有检查通过、用量 fresh 为 true，再从真实设备验证连接和订阅刷新。日常更新与重启见[日常运维](OPERATIONS.md)。

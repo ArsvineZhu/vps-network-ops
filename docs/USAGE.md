@@ -9,7 +9,7 @@ uv run vps-ops deploy init C:/private/node.yaml
 uv run vps-ops deploy apply C:/private/node.yaml
 ```
 
-选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](../../../../docs/DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址。
+选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址，使用 `deploy show subscriptions --json` 获取 JSON。
 
 ## 安装与运行位置
 
@@ -20,7 +20,7 @@ uv sync --locked
 uv run vps-ops --help
 ```
 
-本机可连接服务器、生成成员材料与客户端配置、处理订阅文件。系统检查、日志、服务控制、用量、DNS、软件更新和重启在 Ubuntu VPS 上执行。服务器安装见[部署指南](../../../../docs/DEPLOYMENT.md)。服务器操作以 root 身份执行；普通 SSH 用户先登录系统终端，再运行 sudo vps-ops shell。
+本机可连接服务器、生成成员材料与客户端配置、处理订阅文件。系统检查、日志、服务控制、用量、DNS、软件更新和重启在 Ubuntu VPS 上执行。服务器安装见[部署指南](DEPLOYMENT.md)。服务器操作以 root 身份执行；普通 SSH 用户先登录系统终端，再运行 sudo vps-ops shell。
 
 下面的 IP、域名和私有路径均为示例。替换为自己的配置；输入输出的父目录应已存在且只允许自己的账户访问。Linux 可用 install -d -m 0700 /private 创建目录；Windows 使用账户私有目录并检查 ACL。
 
@@ -92,12 +92,17 @@ vps-ops --json check dns
 vps-ops --json usage report
 ```
 
-JSON 支持 status、check、DNS 结果和 usage report。交互会话内写为 --json check。自定义服务器配置的会话从普通 SSH 终端启动：vps-ops --config /private/ops.yaml shell。connect 使用远端默认配置。
+JSON 支持 status、check、DNS 结果、usage report、logs、packages list 和订阅地址。交互会话内可写为 `--json check`，也可以使用 `status --json`、`usage report --json` 或 `logs caddy --json`。自定义服务器配置的会话从普通 SSH 终端启动：`vps-ops --config /private/ops.yaml shell`。connect 使用远端默认配置。
 
 ## 状态和功能检查
 
 ```sh
 vps-ops status
+vps-ops status --all
+vps-ops status --service mihomo --service caddy
+vps-ops status --network --firewall
+vps-ops status --updates --errors
+vps-ops --json status --all
 vps-ops check
 vps-ops check dns
 vps-ops check proxy
@@ -106,7 +111,23 @@ vps-ops check certificate
 vps-ops check tailscale
 ```
 
-status 汇总系统负载、内存、磁盘、TCP 监听、宿主路由、防火墙、失败单元、待更新包、服务状态、启动标识、最近 24 小时错误数和重启提示。报告中的“读取失败”表示该项采集未成功。
+不带参数时，`status` 显示系统与负载、内存、根分区、服务摘要、失败单元和重启提示；需要关注的服务会单独列出。默认概览只查询这些内容。按需选择一个或多个分类：
+
+| 参数             | 内容                                       |
+| ---------------- | ------------------------------------------ |
+| `--system`       | 内核、运行时间、负载、启动标识和重启提示   |
+| `--resources`    | 内存、交换空间和全部挂载的磁盘             |
+| `--services`     | 配置中全部服务的状态和系统失败单元         |
+| `--service 名称` | 指定服务的状态，可重复；服务名必须在配置中 |
+| `--network`      | TCP 监听、路由和网络空间                   |
+| `--firewall`     | 防火墙规则                                 |
+| `--updates`      | 待更新软件包和重启提示                     |
+| `--errors`       | 最近 24 小时的系统错误数量                 |
+| `--all`          | 查看全部分类                               |
+
+分类参数可以组合，例如 `status --network --firewall`。`--service` 可与其他分类组合，限制服务列表；同名服务允许带或不带 `.service` 后缀。`status --help` 显示参数说明。报告中的“读取失败”表示该项采集未成功，其他项目仍会显示。
+
+`--json` 输出所选范围的机器数据，和文本显示的数据来源一致。`--json status` 现在输出默认概览；需要原先的完整字段时，使用 `--json status --all`。完整 JSON 中的 `服务` 值保留原有 systemd 字段格式。
 
 check 默认等同 check all，单项失败后继续检查其他项：
 
@@ -128,15 +149,16 @@ check 默认等同 check all，单项失败后继续检查其他项：
 ```sh
 vps-ops logs mihomo --since "1 hour ago" --lines 50
 vps-ops logs tcpfp-syn-windows --follow
+vps-ops logs caddy --json --lines 10
 vps-ops service status mihomo
 vps-ops service restart mihomo
 vps-ops usage report
 vps-ops --json usage report
 ```
 
-logs 默认最近 24 小时、最多 50 行；--since 使用 journalctl 时间表达式；--follow 持续输出。CLI 过滤入口配置中的已知认证值和 HTTP URL；系统日志仍按私有数据处理。
+logs 默认最近 24 小时、最多 50 行；--since 使用 journalctl 时间表达式；--follow 持续输出。普通日志按原行显示，应用输出的 JSON 对象会分层排版。`--json` 改用 journalctl 的 JSON 字段，每行一个对象，适合程序读取。两种方式都会过滤入口配置中的已知认证值、订阅路径和 HTTP URL；系统日志仍按私有数据处理。
 
-service 支持 status、start、stop、restart，服务名使用配置条目，如 mihomo 或 vps-rules.path。修改入口配置后先在普通终端检查：
+service 支持 status、start、stop、restart，服务名使用配置条目，如 mihomo 或 vps-rules.path。`service status` 显示 systemd 的详细服务状态；查看最近日志使用 `logs`。修改入口配置后先在普通终端检查：
 
 ```sh
 /usr/local/bin/mihomo -t -d /var/lib/mihomo -f /etc/mihomo/config.yaml
@@ -144,7 +166,7 @@ vps-ops service restart mihomo
 vps-ops check proxy
 ```
 
-用量字段：fresh 表示近期采样成功，last_success 为 UTC 时间，upload_bytes、download_bytes 为累计字节数；active_connections 在采样新鲜时是连接数，过期时为 null；ever_observed 表示用户是否曾被观察。近似计数保存在原有 SQLite 数据库。fresh 为 false 时查看 logs mihomo-observed，并确认控制套接字可用。
+用量默认按用户分行显示采样状态、上次成功时间、上传和下载量及活跃连接；数值同时显示易读单位和精确字节数。机器输出中的 fresh 表示近期采样成功，last_success 带时区，upload_bytes、download_bytes 为累计字节数；active_connections 在采样过期时为 null；ever_observed 表示用户是否曾被观察。近似计数保存在原有 SQLite 数据库。数据未更新时查看 logs mihomo-observed，并确认控制套接字可用。
 
 usage serve [--config PATH] 由 systemd 运行采集器；usage report [--config PATH] 指定采集配置，默认 /etc/mihomo-observed/collector.json。已有采集服务运行时只调用 report。
 
@@ -200,7 +222,7 @@ uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
 
 替换全部示例连接值。server 为公网 IP 或域名，servername 为 REALITY 的 TLS 主机名，public_key 为服务端 REALITY 公钥，uuid 为已注册用户身份。short_id 为偶数位十六进制，最长 16 位。name、fingerprint 可省略，默认 Private-VPS、chrome；指纹还支持 firefox、safari、ios、android、edge、random。不接受额外字段。
 
-复制 system/subscriptions/rules.yaml 到 /private/rules.yaml，填写 base-url、variables.server_ipv4、variables.ssh_port，策略说明见[订阅与规则](../../../../docs/RULES.md)。运行：
+复制 system/subscriptions/rules.yaml 到 /private/rules.yaml，填写 base-url、variables.server_ipv4、variables.ssh_port，策略说明见[订阅与规则](RULES.md)。运行：
 
 ```sh
 vps-ops profile generate /private/node.json /private/profile.yaml --policy /private/rules.yaml

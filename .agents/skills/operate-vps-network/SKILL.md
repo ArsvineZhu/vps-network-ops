@@ -15,7 +15,7 @@ description: 维护个人 VPS 的 Mihomo、TCP 指纹出口、Tailscale、HTTPS 
 - 安装与配置：[部署指南](../../../docs/DEPLOYMENT.md)
 - 服务、订阅、证书和统计：[日常运维](../../../docs/OPERATIONS.md)
 - 订阅策略与规则更新：[订阅与规则](../../../docs/RULES.md)
-- 命令行工具：[工具说明](scripts/USAGE.md)
+- 命令行工具：[工具说明](../../../docs/USAGE.md)
 - 开发工具与检查：[开发指南](../../../docs/DEVELOPMENT.md)
 - 协议和网络机制：[网络资料](../../../docs/materials/NETWORK.md)
 

@@ -14,15 +14,15 @@ from .subscription_policy import configure
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(description="生成新成员的客户端配置和待注册信息")
     p.add_argument(
         "public_template",
         type=Path,
-        help="JSON server/port/servername/public_key/short_id, optional fingerprint; NO UUID/private key",
+        help="服务端公开信息的 JSON 文件：server、port、servername、public_key、short_id",
     )
-    p.add_argument("member", help="unique local label, not a real name")
-    p.add_argument("output", type=Path, help="new private directory")
-    p.add_argument("--policy", required=True, type=Path, help="shared routing policy")
+    p.add_argument("member", help="成员标识")
+    p.add_argument("output", type=Path, help="尚不存在的私有输出目录")
+    p.add_argument("--policy", required=True, type=Path, help="共享路由策略文件")
     a = p.parse_args()
     try:
         import re
@@ -57,15 +57,12 @@ def main():
     except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError):
         p.exit(
             1,
-            "Failed. Check template schema, label and new output directory; partial private files may remain.\n",
+            "生成失败。请检查模板格式、成员标识和输出目录；已创建的部分文件可能保留。\n",
         )
-    print(
-        "Private bundle created. PENDING: register server-user.pending.json in the intended listener users, validate and restart before sharing. No server changes or publication performed."
-    )
+    print("已生成成员资料（待注册）。")
+    print("下一步：将 server-user.pending.json 加入服务端入口，检查配置并重启服务。")
     if os.name == "nt":
-        print(
-            "Protect output directory with Windows ACLs before use; POSIX modes are not Windows access controls."
-        )
+        print("请检查输出目录的 Windows 访问权限（ACL）。")
 
 
 if __name__ == "__main__":

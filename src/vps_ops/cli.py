@@ -7,15 +7,19 @@ import os
 import shlex
 import subprocess
 import sys
-from pathlib import Path
 
 from .checks import checks
-from .runtime import config, emit, resolver, run
+from .output import emit
+from .runtime import config, resolver, run
 
 
 def dispatch_module(module, args):
-    sys.argv = ["vps-ops " + module, *args]
-    importlib.import_module("vps_ops." + module).main()
+    original = sys.argv
+    try:
+        sys.argv = ["vps-ops " + module, *args]
+        return importlib.import_module("vps_ops." + module).main() or 0
+    finally:
+        sys.argv = original
 
 
 def execute(argv):
@@ -55,7 +59,7 @@ def execute(argv):
     if cmd == "deploy":
         from .deploy.client import main as deploy_main
 
-        deploy_main(rest)
+        deploy_main(rest, machine=a.json)
         return 0
     if cmd in ("member", "profile", "subscription", "certificate"):
         expected, module = {
@@ -66,8 +70,7 @@ def execute(argv):
         }[cmd]
         if not rest or rest.pop(0) != expected:
             p.error(f"需要 {cmd} {expected}")
-        dispatch_module(module, rest)
-        return 0
+        return dispatch_module(module, rest)
     if cmd == "usage":
         if not rest or rest[0] not in ("report", "serve"):
             p.error("usage report|serve")
@@ -77,10 +80,14 @@ def execute(argv):
             import contextlib
             import io
 
+            report_args = rest[1:]
+            report_json = "--json" in report_args
+            if report_json:
+                report_args.remove("--json")
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                dispatch_module("usage_daemon", ["--report", *rest[1:]])
-            emit(json.loads(buf.getvalue()), a.json)
+                dispatch_module("usage_daemon", ["--report", *report_args])
+            emit(json.loads(buf.getvalue()), a.json or report_json, view="usage")
         return 0
     if cmd == "controller":
         if rest != ["check-directory"]:
@@ -128,6 +135,24 @@ def execute(argv):
                     type(e).__name__ + ": 操作失败" if not isinstance(e, RuntimeError) else str(e),
                     file=sys.stderr,
                 )
+    if cmd == "status":
+        from . import status
+
+        options = status.arguments(rest)
+        c = config(a.config)
+        try:
+            selected_services = status.select_services(options.service or [], c["services"])
+        except ValueError as exc:
+            p.error(str(exc))
+        sections = set(status.SECTIONS) if options.all else set(options.sections or [])
+        summary = not sections and not selected_services
+        if selected_services:
+            sections.add("services")
+        data = status.collect(
+            c["services"], sections, summary=summary, selected_services=selected_services
+        )
+        emit(data, a.json or options.json, view="status", summary=summary)
+        return 0
     c = config(a.config)
     if cmd == "check" or cmd == "dns" and rest == ["diagnose"]:
         section = rest[0] if cmd == "check" and rest else "dns" if cmd == "dns" else "all"
@@ -143,54 +168,25 @@ def execute(argv):
         result = checks(c, "dns")
         emit(result, a.json)
         return int(any(x["state"] == "失败" for x in result))
-    if cmd == "status":
-        data = {}
-        for key, args in {
-            "系统": ["uname", "-sr"],
-            "运行": ["uptime"],
-            "内存": ["free", "-h"],
-            "磁盘": ["df", "-hT"],
-            "监听": ["ss", "-lnt"],
-            "路由": ["ip", "route"],
-            "防火墙": ["ufw", "status"],
-            "失败服务": ["systemctl", "--failed", "--no-pager"],
-            "更新": ["apt", "list", "--upgradable"],
-        }.items():
-            try:
-                data[key] = run(args)
-            except (RuntimeError, OSError, subprocess.SubprocessError):
-                data[key] = "读取失败"
-        data["服务"] = {
-            s: run(
-                ["systemctl", "show", s, "-p", "ActiveState", "-p", "SubState", "-p", "NRestarts"]
-            )
-            for s in c["services"]
-        }
-        data["启动标识"] = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
-        data["最近24小时错误数"] = len(
-            run(
-                ["journalctl", "-p", "0..3", "--since", "24 hours ago", "--no-pager", "-o", "json"]
-            ).splitlines()
-        )
-        data["网络空间"] = run(["ip", "netns", "list"])
-        data["需要重启"] = Path("/var/run/reboot-required").exists()
-        emit(data, a.json)
-        return 0
     if cmd == "logs":
         lp = argparse.ArgumentParser()
         lp.add_argument("service")
         lp.add_argument("--since", default="24 hours ago")
         lp.add_argument("--lines", type=int, default=50)
         lp.add_argument("--follow", action="store_true")
+        lp.add_argument("--json", action="store_true", help="逐行输出 JSON 日志")
         x = lp.parse_args(rest)
         if x.service.removesuffix(".service") not in c["services"]:
             p.error("未知服务")
         args = ["journalctl", "-u", x.service, "--since", x.since, "-n", str(x.lines), "--no-pager"]
+        machine = a.json or x.json
+        if machine:
+            args += ["-o", "json"]
         if x.follow:
             args.append("-f")
         from .runtime import filtered_logs
 
-        return filtered_logs(args, c)
+        return filtered_logs(args, c, machine=machine)
     if cmd == "service":
         if (
             len(rest) != 2
@@ -198,10 +194,12 @@ def execute(argv):
             or rest[1] not in c["services"]
         ):
             p.error("service <操作> <已配置服务>")
+        if rest[0] == "status":
+            return subprocess.call(["systemctl", *rest, "--full", "--no-pager", "--lines=0"])
         return subprocess.call(["systemctl", *rest, "--no-pager"])
     if cmd == "packages":
         if rest == ["list"]:
-            print(run(["apt", "list", "--upgradable"]))
+            emit({"更新": run(["apt", "list", "--upgradable"])}, a.json, view="status")
             return 0
         if rest != ["upgrade"]:
             p.error("packages list|upgrade")

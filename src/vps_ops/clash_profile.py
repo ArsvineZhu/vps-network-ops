@@ -93,23 +93,23 @@ def generate(d):
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("descriptor", type=Path)
-    p.add_argument("output", type=Path)
+    p = argparse.ArgumentParser(description="从节点信息生成客户端配置")
+    p.add_argument("descriptor", type=Path, help="节点信息 JSON 文件")
+    p.add_argument("output", type=Path, help="尚不存在的输出文件")
     p.add_argument(
         "--policy",
         type=Path,
-        help="shared routing policy for a standalone profile",
+        help="完整配置使用的共享路由策略文件",
     )
     p.add_argument(
         "--kind",
         choices=["profile", "provider"],
         default="profile",
-        help="provider contains only proxies and is not a standalone profile",
+        help="profile 为完整配置，provider 为节点提供者文件",
     )
     a = p.parse_args()
     if a.kind == "profile" and not a.policy:
-        p.error("a standalone profile requires --policy")
+        p.error("生成完整配置需要 --policy")
     try:
         profile = generate(json.loads(a.descriptor.read_text(encoding="utf-8-sig")))
         if a.kind == "provider":
@@ -123,12 +123,13 @@ def main():
             f.write("\n")
     except (ValueError, TypeError, KeyError, OSError, yaml.YAMLError) as e:
         # Exception messages from parsing may contain credentials; print type only.
-        p.exit(1, "Failed: " + type(e).__name__ + ". Check descriptor schema and output path.\n")
-    print(
-        "Created private local JSON-formatted YAML. Import/reload it explicitly; no system settings changed."
-    )
+        p.exit(1, "生成失败（" + type(e).__name__ + "）。请检查节点信息和输出路径。\n")
+    if a.kind == "provider":
+        print("已生成节点提供者文件，请在客户端配置中引用。")
+    else:
+        print("已生成客户端配置，请在客户端导入并启用。")
     if os.name == "nt":
-        print("Windows: verify output folder ACL; POSIX mode 0600 does not enforce Windows ACLs.")
+        print("请检查输出目录的 Windows 访问权限（ACL）。")
 
 
 if __name__ == "__main__":

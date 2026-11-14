@@ -159,7 +159,10 @@ def _checks(c, section):
             from .certificate_check import check
 
             path = "/run/credentials/mihomo.service/tls-fullchain.pem"
-            check(path, c["subscription_host"], 7)
+            try:
+                check(path, c["subscription_host"], 7)
+            except ValueError as exc:
+                raise RuntimeError(str(exc)) from exc
             return run(["openssl", "x509", "-in", path, "-noout", "-dates"])
 
         check("证书", cert)
