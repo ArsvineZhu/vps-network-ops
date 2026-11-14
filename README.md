@@ -55,3 +55,7 @@ make check
 ```
 
 配置文件、订阅链接、密钥、证书和真实连接数据不要放入仓库。服务的监听端口、防火墙和认证方式以服务器实际配置为准。
+
+## 许可证
+
+本项目原创代码采用 [MIT 许可证](LICENSE)。[SYN 队列处理进程](system/tcpfp/mirage-syn/README.md)包含 GPL-3.0 代码；[eBPF 程序](system/tcpfp/ebpf/syn_rewrite.c)采用 GPL-2.0-only，各自保留原许可。
