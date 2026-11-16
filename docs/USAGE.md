@@ -9,7 +9,7 @@ uv run vps-ops deploy init C:/private/node.yaml
 uv run vps-ops deploy apply C:/private/node.yaml
 ```
 
-选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址，使用 `deploy show subscriptions --json` 获取 JSON。
+选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址，使用 `deploy show subscriptions --json` 获取 JSON。 当前自动部署展示一条共享订阅 URL；Windows 和 iPhone 可使用同一 URL，在各自客户端内更新时自动领取对应的身份配置。
 
 ## 安装与运行位置
 
@@ -220,26 +220,26 @@ uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
 }
 ```
 
-替换全部示例连接值。server 为公网 IP 或域名，servername 为 REALITY 的 TLS 主机名，public_key 为服务端 REALITY 公钥，uuid 为已注册用户身份。short_id 为偶数位十六进制，最长 16 位。name、fingerprint 可省略，默认 node、chrome；指纹还支持 firefox、safari、ios、android、edge、random。`--target Apple` 时默认使用 ios 指纹。不接受额外字段。
+替换全部示例连接值。server 为公网 IP 或域名，servername 为 REALITY 的 TLS 主机名，public_key 为服务端 REALITY 公钥，uuid 为已注册用户身份。short_id 为偶数位十六进制，最长 16 位。name、fingerprint 可省略，默认 node、chrome；指纹还支持 firefox、safari、ios、android、edge、random。不接受额外字段。本地文件生成仅使用输入 UUID，设备自动选择发生在服务器远程订阅更新时。
 
 复制 system/subscriptions/rules.yaml 到 /private/rules.yaml，填写 base-url、variables.server_ipv4、variables.ssh_port，策略说明见[订阅与规则](RULES.md)。运行：
 
 ```sh
-vps-ops profile generate /private/node.json /private/profile.yaml --target Apple --policy /private/rules.yaml
+vps-ops profile generate /private/node.json /private/profile.yaml --policy /private/rules.yaml
 vps-ops profile generate /private/node.json /private/provider.yaml --kind provider
 ```
 
-默认 --kind profile 生成完整配置，必须提供 --policy；`--target win|Apple` 用于设置设备目标和客户端 TUN 配置，默认节点据此命名并被选中。目标不负责生成或修改服务端用户凭据，输入描述中的 UUID 必须对应已注册的设备身份。provider 只输出节点列表，可被其他配置引用。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
+默认 --kind profile 生成完整配置，必须提供 --policy。provider 只输出节点列表，可被其他配置引用。此离线命令不会检测设备，也不会为单个 UUID 自动生成两套服务器认证身份。自动部署生成的远程订阅提供一个共享链接，下载时通过客户端 User-Agent 在已有 WIN/Apple 身份间选择。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
 
 ## 创建成员材料
 
 模板沿用节点描述，去掉 uuid、name，只保留 server、port、servername、public_key、short_id 和可选 fingerprint：
 
 ```sh
-vps-ops member create /private/server.json tablet /private/tablet --target win --policy /private/rules.yaml
+vps-ops member create /private/server.json tablet /private/tablet --policy /private/rules.yaml
 ```
 
-标签为 1 至 40 位字母、数字、下划线或连字符。`--target win|Apple` 只设置新成员客户端的标识和网络参数，不会自动把新 UUID 注册到对应的服务端路由。输出目录必须不存在，父目录已存在。生成：
+标签为 1 至 40 位字母、数字、下划线或连字符。新成员生成与平台注册分离；此命令只生成待注册凭据，自动切换 WIN/Apple 出口需服务端已经给该订阅持有者配置相应的两套身份。输出目录必须不存在，父目录已存在。生成：
 
 | 文件                     | 用途                             |
 | ------------------------ | -------------------------------- |
