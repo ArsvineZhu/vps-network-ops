@@ -104,7 +104,7 @@ def render(c, assets):
     policy["variables"].update(server_ipv4=c["public_ipv4"], ssh_port=c["port"])
     save("/etc/vps-rules/rules.yaml", yaml.safe_dump(policy))
     links = {}
-    for r, ip in (("windows", "10.203.1.2"), ("ios", "10.203.2.2")):
+    for r, target, ip in (("windows", "win", "10.203.1.2"), ("ios", "Apple", "10.203.2.2")):
         user = state["roles"][r]
         backend = yaml.safe_load(text("tcpfp/backend.example.yaml"))
         backend["listeners"][0].update(
@@ -119,8 +119,8 @@ def render(c, assets):
                 servername=c.get("reality_host", "www.microsoft.com"),
                 public_key=state["public"],
                 short_id=state["short"],
-                name=r,
-            )
+            ),
+            target=target,
         )
         for kind, port, password in (
             ("hysteria2", 8443, user["hy"]),
@@ -128,7 +128,7 @@ def render(c, assets):
         ):
             profile["proxies"].append(
                 dict(
-                    name=r + "-" + kind,
+                    name=target + (" · HY2" if kind == "hysteria2" else " · AnyTLS"),
                     type=kind,
                     server=c["public_ipv4"],
                     port=port,
@@ -143,7 +143,7 @@ def render(c, assets):
         write_profile(path, profile)
         os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
         path.chmod(0o640)
-        links[r] = "https://" + c["domain"] + ":9443/s/" + path.name
+        links[target] = "https://" + c["domain"] + ":9443/s/" + path.name
     save("/etc/vps-ops/subscriptions.json", links)
     uid = str(__import__("pwd").getpwnam("mihomo").pw_uid)
     guard = text("mihomo/mihomo-guard.nft")
