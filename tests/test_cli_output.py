@@ -158,6 +158,7 @@ def test_usage_report_is_readable_and_json_remains_available(monkeypatch, capsys
     assert "手机\n" in output and "上传：1.00 KiB（1,024 字节）" in output
     assert "活跃连接：未知" in output
     assert "auto：https://example.invalid/s/auto/private.yaml\\n" in output
+    assert "auto：https://example.invalid/s/auto/private.yaml\\n" in output
     assert '{"' not in output and "\\n" not in output
 
     assert cli.execute(["usage", "report", "--json"]) == 0
@@ -202,7 +203,7 @@ def test_structured_logs_are_readable_or_json_without_exposing_secrets(
     event = {
         "level": "error",
         "msg": "request failed",
-        "request": {"uri": f"/s/{token}.yaml", "authorization": 'p"ss'},
+        "request": {"uri": f"/s/auto/{token}.yaml", "authorization": 'p"ss'},
     }
     commands = []
 
