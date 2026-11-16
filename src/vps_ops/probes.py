@@ -29,7 +29,15 @@ def subscription(c, url, expected, *, user_agent=None, target=None):
         raise RuntimeError("Subscription response does not match the expected configuration")
     if target is not None:
         frontend = yaml.safe_load(Path(c["frontend_config"]).read_text())
-        for platform, user in (("Windows", "windows-test"), ("Apple", "ios-test")):
+        for platform in ("Windows", "Apple"):
+            routes = [
+                rule.split(",")
+                for rule in frontend["rules"]
+                if rule.startswith("IN-USER,") and rule.endswith("," + platform)
+            ]
+            if len(routes) != 1 or len(routes[0]) != 3:
+                raise RuntimeError("Server TCP route is missing or ambiguous for this identity")
+            user = routes[0][1]
             for protocol in ("vless", "hysteria2", "anytls"):
                 nodes = [
                     n
@@ -48,8 +56,6 @@ def subscription(c, url, expected, *, user_agent=None, target=None):
                     valid = nodes[0].get("password") == listeners[0]["users"].get(user)
                 if not valid:
                     raise RuntimeError("Subscription credentials do not match the server identity")
-            if f"IN-USER,{user},{platform}" not in frontend["rules"]:
-                raise RuntimeError("Server TCP route is missing for this identity")
         primary = next((g for g in profile.get("proxy-groups", []) if g["name"] == "Nodes"), {})
         names = {n["name"] for n in profile["proxies"]}
         if set(primary.get("proxies", [])) != names:
