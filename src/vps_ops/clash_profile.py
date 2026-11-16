@@ -110,7 +110,9 @@ def generate(d, *, target=None):
             "proxy-server-nameserver": ["https://1.1.1.1/dns-query"],
         },
         "proxies": [node],
-        "proxy-groups": [{"name": "节点", "type": "select", "proxies": [name], "default-selected": name}],
+        "proxy-groups": [
+            {"name": "节点", "type": "select", "proxies": [name], "default-selected": name}
+        ],
         "rules": ["MATCH,节点"],
     }
 
