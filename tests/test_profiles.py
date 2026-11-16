@@ -22,7 +22,7 @@ def test_profile_routes_through_the_node():
     assert profile["rules"] == ["MATCH,节点"]
     assert profile["dns"]["nameserver"] == ["https://1.1.1.1/dns-query#节点"]
     assert profile["tun"]["enable"] is True
-    assert profile["tun"]["strict-route"] is True
+    assert "strict-route" not in profile["tun"]
     assert profile["proxy-groups"][0]["default-selected"] == profile["proxies"][0]["name"]
 
 
