@@ -220,16 +220,16 @@ uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
 }
 ```
 
-替换全部示例连接值。server 为公网 IP 或域名，servername 为 REALITY 的 TLS 主机名，public_key 为服务端 REALITY 公钥，uuid 为已注册用户身份。short_id 为偶数位十六进制，最长 16 位。name、fingerprint 可省略，默认 Private-VPS、chrome；指纹还支持 firefox、safari、ios、android、edge、random。不接受额外字段。
+替换全部示例连接值。server 为公网 IP 或域名，servername 为 REALITY 的 TLS 主机名，public_key 为服务端 REALITY 公钥，uuid 为已注册用户身份。short_id 为偶数位十六进制，最长 16 位。name、fingerprint 可省略，默认 node、chrome；指纹还支持 firefox、safari、ios、android、edge、random。`--target Apple` 时默认使用 ios 指纹。不接受额外字段。
 
 复制 system/subscriptions/rules.yaml 到 /private/rules.yaml，填写 base-url、variables.server_ipv4、variables.ssh_port，策略说明见[订阅与规则](RULES.md)。运行：
 
 ```sh
-vps-ops profile generate /private/node.json /private/profile.yaml --policy /private/rules.yaml
+vps-ops profile generate /private/node.json /private/profile.yaml --target Apple --policy /private/rules.yaml
 vps-ops profile generate /private/node.json /private/provider.yaml --kind provider
 ```
 
-默认 --kind profile 生成完整配置，必须提供 --policy；provider 只输出节点列表，可被其他配置引用。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
+默认 --kind profile 生成完整配置，必须提供 --policy；`--target win|Apple` 用于设置设备目标和客户端 TUN 配置，默认节点据此命名并被选中。目标不负责生成或修改服务端用户凭据，输入描述中的 UUID 必须对应已注册的设备身份。provider 只输出节点列表，可被其他配置引用。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
 
 ## 创建成员材料
 
