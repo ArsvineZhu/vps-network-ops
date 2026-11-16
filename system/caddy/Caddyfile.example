@@ -6,13 +6,16 @@
 https://REPLACE_WITH_SUBSCRIPTION_DOMAIN:9443 {
 	tls /etc/caddy/certs/REPLACE_WITH_DOMAIN/current/fullchain.pem /etc/caddy/certs/REPLACE_WITH_DOMAIN/current/key.pem
 	# One secret URL works for both clients. The request User-Agent selects
-	# which existing device credential / TCP fingerprint route is delivered.
+	# the default node; every variant includes both device identities.
 	@auto_subscription {
 		path_regexp auto_subscription ^/s/auto/([A-Za-z0-9_-]{43})[.]yaml$
 		method GET HEAD
 	}
 	@apple_subscription header_regexp User-Agent "(?i)(darwin|iphone|ipad|macintosh|mac os x|cfnetwork)"
-	@win_subscription header_regexp User-Agent "(?i)(windows|win64|clash-verge/)"
+	@win_subscription {
+		header_regexp User-Agent "(?i)(windows|win64|clash-verge/)"
+		not header_regexp User-Agent "(?i)(darwin|iphone|ipad|macintosh|mac os x|cfnetwork)"
+	}
 	handle @auto_subscription {
 		header Cache-Control "no-store"
 		header Referrer-Policy "no-referrer"
@@ -24,12 +27,14 @@ https://REPLACE_WITH_SUBSCRIPTION_DOMAIN:9443 {
 			file_server
 		}
 		handle @win_subscription {
-			rewrite * /{re.auto_subscription.1}.WIN.yaml
+			rewrite * /{re.auto_subscription.1}.Windows.yaml
 			root * /srv/vps-subscriptions
 			file_server
 		}
 		handle {
-			respond "Cannot identify the subscription client's platform" 406
+			rewrite * /{re.auto_subscription.1}.yaml
+			root * /srv/vps-subscriptions
+			file_server
 		}
 	}
 	@subscription {

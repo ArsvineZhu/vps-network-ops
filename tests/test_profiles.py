@@ -19,8 +19,8 @@ def test_profile_routes_through_the_node():
     }
     profile = clash_profile.generate(node)
     assert profile["proxies"][0]["uuid"] == node["uuid"]
-    assert profile["rules"] == ["MATCH,节点"]
-    assert profile["dns"]["nameserver"] == ["https://1.1.1.1/dns-query#节点"]
+    assert profile["rules"] == ["MATCH,Nodes"]
+    assert profile["dns"]["nameserver"] == ["https://1.1.1.1/dns-query#Nodes"]
     assert profile["tun"]["enable"] is True
     assert "strict-route" not in profile["tun"]
     assert profile["proxy-groups"][0]["default-selected"] == profile["proxies"][0]["name"]
@@ -35,9 +35,9 @@ def test_target_controls_identity_and_client_tun():
         "public_key": "A" * 43,
         "short_id": "aabb",
     }
-    win = clash_profile.generate(node, target="WIN")
+    win = clash_profile.generate(node, target="Windows")
     apple = clash_profile.generate(node, target="Apple")
-    assert win["proxies"][0]["name"] == "WIN · VLESS"
+    assert win["proxies"][0]["name"] == "Windows · VLESS"
     assert apple["proxies"][0]["name"] == "Apple · VLESS"
     assert apple["proxies"][0]["client-fingerprint"] == "ios"
     assert win["tun"]["strict-route"] is True
@@ -76,7 +76,9 @@ def test_member_generation_uses_a_distinct_identity(tmp_path):
             [
                 sys.executable,
                 "-m",
-                "vps_ops.new_member",
+                "vps_ops",
+                "member",
+                "create",
                 source,
                 name,
                 output,
@@ -90,7 +92,7 @@ def test_member_generation_uses_a_distinct_identity(tmp_path):
         client = json.loads((output / "profile.yaml").read_text(encoding="utf-8"))
         server = json.loads((output / "server-user.pending.json").read_text(encoding="utf-8"))
         assert client["proxies"][0]["uuid"] == server["uuid"]
-        assert client["proxies"][0]["name"] == "win · VLESS"
+        assert client["proxies"][0]["name"] == name
         assert server["uuid"] not in result.stdout
         identities.append(server["uuid"])
     assert identities[0] != identities[1]

@@ -40,15 +40,15 @@ def test_status_overview_and_selected_sections(monkeypatch, capsys):
     monkeypatch.setattr(status, "run", command)
     assert cli.execute(["status"]) == 0
     output = capsys.readouterr().out
-    assert "系统\n" in output and "资源\n" in output and "服务\n" in output
-    assert "运行时间：1 天, 15 小时 25 分钟" in output
-    assert "平均负载（1/5/15 分钟）：0.00 / 0.01 / 0.02" in output
-    assert "已用：410 MiB / 961 MiB" in output and "可用：550 MiB" in output
-    assert "交换空间：未配置" in output and "已用：4 GiB / 20 GiB（23%）" in output
-    assert "活动：2/3 项" in output
-    assert "mihomo：运行中（重启 2 次）" in output
-    assert "caddy：未运行（重启 0 次）" in output
-    assert "系统失败单元：无" in output
+    assert "System\n" in output and "Resources\n" in output and "Services\n" in output
+    assert "Uptime: 1 day, 15h 25m" in output
+    assert "Load average (1/5/15 minutes): 0.00 / 0.01 / 0.02" in output
+    assert "Used: 410 MiB / 961 MiB" in output and "Available: 550 MiB" in output
+    assert "Swap: Not configured" in output and "Used: 4 GiB / 20 GiB (23%)" in output
+    assert "Active: 2/3" in output
+    assert "mihomo: Running (restarts: 2)" in output
+    assert "caddy: Inactive (restarts: 0)" in output
+    assert "Failed system units: None" in output
     assert "ActiveState=" not in output and "\\n" not in output
     assert ["df", "-hT", "/"] in calls
     assert not {"ss", "ip", "ufw", "apt", "journalctl"} & {args[0] for args in calls}
@@ -56,24 +56,24 @@ def test_status_overview_and_selected_sections(monkeypatch, capsys):
     calls.clear()
     assert cli.execute(["status", "--service", "mihomo.service"]) == 0
     output = capsys.readouterr().out
-    assert "mihomo：运行中（重启 2 次）" in output
+    assert "mihomo: Running (restarts: 2)" in output
     assert "caddy" not in output
     assert len(calls) == 1 and calls[0][:3] == ["systemctl", "show", "mihomo"]
 
     calls.clear()
     assert cli.execute(["status", "--network"]) == 0
     output = capsys.readouterr().out
-    assert "0.0.0.0:23899（LISTEN）\n" in output
-    assert "[::1]:8080（LISTEN）\n" in output
-    assert "接收队列：0；发送队列：4096" in output
+    assert "0.0.0.0:23899 (LISTEN)\n" in output
+    assert "[::1]:8080 (LISTEN)\n" in output
+    assert "Receive queue: 0; Send queue: 4096" in output
     assert {args[0] for args in calls} == {"ss", "ip"}
 
     calls.clear()
     assert cli.execute(["--json", "status", "--all"]) == 0
     data = json.loads(capsys.readouterr().out)
-    assert data["服务"]["mihomo"] == "NRestarts=2\nActiveState=active\nSubState=running"
-    assert data["最近24小时错误数"] == 2
-    assert "监听" in data and "防火墙" in data and "更新" in data
+    assert data["services"]["mihomo"] == "NRestarts=2\nActiveState=active\nSubState=running"
+    assert data["error_count_24h"] == 2
+    assert "listeners" in data and "firewall" in data and "updates" in data
     assert ["df", "-hT"] in calls
 
 
@@ -88,8 +88,8 @@ def test_status_survives_a_single_service_query_failure(monkeypatch, capsys):
     monkeypatch.setattr(status, "run", command)
     assert cli.execute(["status", "--services"]) == 0
     output = capsys.readouterr().out
-    assert "mihomo：运行中" in output
-    assert "caddy：读取失败" in output
+    assert "mihomo: Running" in output
+    assert "caddy: Query failed" in output
 
 
 def test_package_list_uses_readable_text_and_supports_json(monkeypatch, capsys):
@@ -98,11 +98,11 @@ def test_package_list_uses_readable_text_and_supports_json(monkeypatch, capsys):
     monkeypatch.setattr(cli, "run", lambda _: packages)
     assert cli.execute(["packages", "list"]) == 0
     output = capsys.readouterr().out
-    assert "待更新软件包：" in output and "example（stable）" in output
-    assert "当前：1.0\n" in output and "可更新：2.0（amd64）\n" in output
+    assert "Upgradable packages:" in output and "example (stable)" in output
+    assert "Current: 1.0\n" in output and "Available: 2.0 (amd64)\n" in output
     assert "Listing..." not in output
     assert cli.execute(["--json", "packages", "list"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"更新": packages}
+    assert json.loads(capsys.readouterr().out) == {"updates": packages}
 
 
 def test_status_help_needs_no_server_configuration(monkeypatch, capsys):
@@ -131,7 +131,7 @@ def test_failed_certificate_check_returns_failure_without_changing_shell_argumen
         ]
     )
     assert result == 1
-    assert "[失败] 证书：证书文件不存在" in capsys.readouterr().out
+    assert "[fail] Certificate file does not exist" in capsys.readouterr().err
     assert sys.argv is original
 
 
@@ -142,7 +142,7 @@ def test_usage_report_is_readable_and_json_remains_available(monkeypatch, capsys
         "fresh": False,
         "users": [
             {
-                "user": "手机",
+                "user": "phone",
                 "ever_observed": True,
                 "upload_bytes": 1024,
                 "download_bytes": 0,
@@ -150,13 +150,15 @@ def test_usage_report_is_readable_and_json_remains_available(monkeypatch, capsys
             }
         ],
     }
-    monkeypatch.setattr(cli, "dispatch_module", lambda *_: print(json.dumps(report)))
+    from vps_ops import usage_daemon
+
+    monkeypatch.setattr(usage_daemon, "read_report", lambda _: report)
     assert cli.execute(["usage", "report"]) == 0
     output = capsys.readouterr().out
-    assert "用量（近似观察值）" in output
-    assert "数据状态：未更新或不可用" in output and "采集失败" in output
-    assert "手机\n" in output and "上传：1.00 KiB（1,024 字节）" in output
-    assert "活跃连接：未知" in output
+    assert "Usage (approximate observations)" in output
+    assert "Data freshness: Stale or unavailable" in output and "Sampling failed" in output
+    assert "phone\n" in output and "Upload: 1.00 KiB (1,024 bytes)" in output
+    assert "Active connections: Unknown" in output
     assert '{"' not in output and "\\n" not in output
 
     assert cli.execute(["usage", "report", "--json"]) == 0
@@ -170,10 +172,12 @@ def test_checks_and_subscription_addresses_are_formatted(monkeypatch, tmp_path, 
     monkeypatch.setattr(
         cli,
         "checks",
-        lambda *_: [{"state": "通过", "name": "证书", "detail": "开始：今天\n到期：明年"}],
+        lambda *_: [
+            {"state": "pass", "name": "Certificate", "detail": "Start: today\nExpires: next year"}
+        ],
     )
     assert cli.execute(["check", "certificate"]) == 0
-    assert "[通过] 证书：\n  开始：今天\n  到期：明年" in capsys.readouterr().out
+    assert "[pass] Certificate:\n  Start: today\n  Expires: next year" in capsys.readouterr().out
 
     subscription_file = tmp_path / "subscriptions.json"
     subscriptions = {"auto": "https://example.invalid/s/auto/private.yaml"}
@@ -181,7 +185,7 @@ def test_checks_and_subscription_addresses_are_formatted(monkeypatch, tmp_path, 
     monkeypatch.setattr(client, "Path", lambda _: subscription_file)
     assert cli.execute(["deploy", "show", "subscriptions"]) == 0
     output = capsys.readouterr().out
-    assert "auto：https://example.invalid/s/auto/private.yaml\n" in output
+    assert "auto: https://example.invalid/s/auto/private.yaml\n" in output
     assert '{"' not in output
     assert cli.execute(["--json", "deploy", "show", "subscriptions"]) == 0
     assert json.loads(capsys.readouterr().out) == subscriptions
@@ -217,8 +221,8 @@ def test_structured_logs_are_readable_or_json_without_exposing_secrets(
     monkeypatch.setattr(subprocess, "Popen", process)
     assert cli.execute(["logs", "caddy"]) == 0
     output = capsys.readouterr().out
-    assert "caddy[7]:\n" in output and "级别：error" in output
-    assert "信息：request failed" in output and "request：\n" in output
+    assert "caddy[7]:\n" in output and "Level: error" in output
+    assert "Message: request failed" in output and "request:\n" in output
     assert token not in output and 'p"ss' not in output and 'p\\"ss' not in output
     assert '"request"' not in output
 
@@ -227,6 +231,49 @@ def test_structured_logs_are_readable_or_json_without_exposing_secrets(
     assert record["PRIORITY"] == "3" and "request failed" in record["MESSAGE"]
     assert token not in record["MESSAGE"] and 'p"ss' not in record["MESSAGE"]
     message = json.loads(record["MESSAGE"])
-    assert message["request"]["authorization"] == "[隐藏]"
-    assert message["request"]["uri"] == "/s/[隐藏].yaml"
+    assert message["request"]["authorization"] == "[REDACTED]"
+    assert message["request"]["uri"] == "/s/[REDACTED].yaml"
     assert ["-o", "json"] == commands[-1][-2:]
+
+
+def test_shell_continues_after_failed_operations_and_invalid_arguments(monkeypatch, capsys):
+    commands = iter(
+        [
+            "certificate check --cert missing.pem --hostname example.com",
+            "unknown-command",
+            "profile generate --help",
+            "exit",
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(commands))
+    assert cli.execute(["shell"]) == 0
+    captured = capsys.readouterr()
+    assert "Certificate file does not exist" in captured.err
+    assert "invalid choice" in captured.err
+    assert "--kind" in captured.out
+
+
+def test_closing_journal_stream_releases_its_process(monkeypatch, tmp_path, capsys):
+    import sys
+
+    from vps_ops.runtime import journal
+
+    original = subprocess.Popen
+    processes = []
+
+    def start(*args, **kwargs):
+        process = original(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(subprocess, "Popen", start)
+    records = journal(
+        [sys.executable, "-u", "-c", "import time; print('ready', flush=True); time.sleep(30)"],
+        {"frontend_config": str(tmp_path / "missing.yaml")},
+    )
+    try:
+        assert next(records) == "ready\n"
+        assert capsys.readouterr().out == ""
+    finally:
+        records.close()
+    assert processes[0].poll() is not None

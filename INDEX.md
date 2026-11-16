@@ -17,3 +17,5 @@
 | `docs/`                                           | 架构、部署、运维、开发和网络资料               |
 
 `AGENTS.md` 是仓库级 Agent 指引；格式、静态检查和构建入口在 `Makefile` 与各语言配置文件中。
+
+CLI 参数与交互输入位于 `src/vps_ops/arguments.py`、`prompts.py`，调用入口位于 `cli.py`，文本与 JSON 展示位于 `output.py`。同目录其余业务模块负责采集、检查、生成和维护，返回数据供入口使用。

@@ -12,7 +12,6 @@ from pathlib import Path
 
 from vps_ops.checks import checks
 from vps_ops.deploy.render import render, save
-from vps_ops.output import emit
 from vps_ops.runtime import DEFAULT, run
 
 from .components import ACME, GO, MIHOMO, command, download, install
@@ -136,6 +135,7 @@ def finish(c):
     if c["mode"] != "tailscale":
         runtime["subscription_host"] = c["domain"]
     save("/etc/vps-ops/config.yaml", yaml_dump(runtime))
+    advertised = None
     if c["mode"] != "mihomo":
         current = json.loads(run(["tailscale", "status", "--json"]))
         if current.get("BackendState") == "Running":
@@ -150,20 +150,8 @@ def finish(c):
             )
         status = json.loads(run(["tailscale", "status", "--json"]))
         advertised = status.get("Self", {}).get("ExitNodeOption", False)
-        print(
-            "Tailscale 已登录；出口节点状态："
-            + ("已提供出口能力" if advertised else "等待控制台批准或状态同步")
-            + "。请在客户端选择此出口。",
-            flush=True,
-        )
     result = checks(DEFAULT | runtime, "all")
-    emit(result)
-    if any(r["state"] == "失败" for r in result):
-        raise RuntimeError("部署后检查失败")
-    print(
-        "部署完成；如已安装代理，可用 deploy show subscriptions 查看私有订阅地址；SSH 会话继续保留。",
-        flush=True,
-    )
+    return {"checks": result, "tailscale_exit": advertised}
 
 
 def yaml_dump(value):
@@ -186,7 +174,12 @@ def main():
     elif action == "start":
         start_proxy(c)
     elif action == "finish":
-        finish(c)
+        from vps_ops.output import emit
+
+        result = finish(c)
+        emit(result, view="deployment")
+        if any(item["state"] == "fail" for item in result["checks"]):
+            raise RuntimeError("Post-deployment checks failed")
     else:
         raise ValueError("unknown deployment action")
 

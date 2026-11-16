@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Read-only local leaf certificate check. Does not establish trust or inspect keys."""
 
-import argparse
 import datetime
 import re
 import subprocess
@@ -10,12 +9,12 @@ from pathlib import Path
 
 def check(cert, hostname, min_days=7):
     if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?", hostname):
-        raise ValueError("主机名格式无效，请填写不含协议、端口或通配符的 DNS 名称")
+        raise ValueError("Invalid hostname; use a DNS name without a scheme, port or wildcard")
     if min_days < 0 or min_days > 3650:
-        raise ValueError("最短有效期必须为 0 至 3650 天")
+        raise ValueError("Minimum validity must be between 0 and 3650 days")
     path = Path(cert)
     if not path.is_file():
-        raise ValueError("证书文件不存在")
+        raise ValueError("Certificate file does not exist")
 
     def run(*args):
         return subprocess.run(
@@ -36,34 +35,17 @@ def check(cert, hostname, min_days=7):
 
     now = datetime.datetime.now(datetime.UTC)
     if parse(dates["notBefore"]) > now:
-        raise ValueError("证书尚未生效")
+        raise ValueError("Certificate is not valid yet")
     if parse(dates["notAfter"]) <= now + datetime.timedelta(days=min_days):
-        raise ValueError("证书已过期或剩余有效期不足")
+        raise ValueError("Certificate has expired or has insufficient remaining validity")
     # Older OpenSSL versions may exit successfully even for a hostname mismatch.
     # Require the explicit positive result instead of trusting the exit code alone.
     result = run("-checkhost", hostname).strip()
     if result != f"Hostname {hostname} does match certificate":
-        raise ValueError("证书主机名不匹配，或无法识别 OpenSSL 的检查结果")
+        raise ValueError("Certificate hostname mismatch or unrecognized OpenSSL response")
 
-
-def main():
-    parser = argparse.ArgumentParser(description="检查证书文件的主机名和有效期")
-    parser.add_argument("--cert", required=True, help="证书文件路径")
-    parser.add_argument("--hostname", required=True, help="需要匹配的 DNS 主机名")
-    parser.add_argument("--min-days", type=int, default=7, help="最少剩余天数，默认 7 天")
-    args = parser.parse_args()
-    try:
-        check(args.cert, args.hostname, args.min_days)
-    except ValueError as exc:
-        print(f"[失败] 证书：{exc}")
-        return 1
-    except (OSError, KeyError, subprocess.SubprocessError):
-        print("[失败] 证书：无法读取或解析文件，请检查证书和 OpenSSL。")
-        return 1
-    print("[通过] 证书：主机名和有效期正常。")
-    print("检查实际 HTTPS 服务，请运行 check subscription。")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    return {
+        "hostname": hostname,
+        "not_before": parse(dates["notBefore"]).isoformat(),
+        "not_after": parse(dates["notAfter"]).isoformat(),
+    }

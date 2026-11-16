@@ -45,8 +45,10 @@ def configure(c, work):
             detail = "\n".join((result.stdout + "\n" + result.stderr).splitlines()[-20:])
             for value in credentials.values():
                 if isinstance(value, str) and value:
-                    detail = detail.replace(value, "[隐藏]")
-            raise RuntimeError("证书步骤失败（" + str(result.returncode) + "）：\n" + detail)
+                    detail = detail.replace(value, "[REDACTED]")
+            raise RuntimeError(
+                "Certificate operation failed (" + str(result.returncode) + "): \n" + detail
+            )
 
     Path("/root/.acme.sh").mkdir(mode=0o700, exist_ok=True)
     # The pinned client installs its DNS plugins next to its managed home.

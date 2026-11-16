@@ -13,8 +13,8 @@ from vps_ops import subscription_policy
 def profile():
     return {
         "proxies": [{"name": "VPS", "type": "vless", "uuid": "private-test-value"}],
-        "proxy-groups": [{"name": "节点", "type": "select", "proxies": ["VPS"]}],
-        "rules": ["MATCH,节点"],
+        "proxy-groups": [{"name": "Nodes", "type": "select", "proxies": ["VPS"]}],
+        "rules": ["MATCH,Nodes"],
     }
 
 
@@ -34,7 +34,7 @@ def test_configured_policy_is_shared_without_changing_nodes():
     assert result["proxies"] == saved["proxies"]
     assert result["proxy-groups"][0] == saved["proxy-groups"][0]
     assert result["proxy-groups"][1]["name"] == "GLOBAL"
-    assert result["proxy-groups"][1]["proxies"][0] == "节点"
+    assert result["proxy-groups"][1]["proxies"][0] == "Nodes"
     assert result["rule-providers"]["google-ai"]["url"].startswith(
         "https://rules.example.test:9443/rules/"
     )
@@ -48,7 +48,16 @@ def test_cli_updates_profile_without_exposing_credentials(tmp_path):
     source.write_text(yaml.safe_dump(profile()), encoding="utf-8")
     source.chmod(0o640)
     result = subprocess.run(
-        [sys.executable, "-m", "vps_ops.subscription_policy", source, "--policy", policy_path()],
+        [
+            sys.executable,
+            "-m",
+            "vps_ops",
+            "subscription",
+            "apply",
+            source,
+            "--policy",
+            policy_path(),
+        ],
         capture_output=True,
         text=True,
     )

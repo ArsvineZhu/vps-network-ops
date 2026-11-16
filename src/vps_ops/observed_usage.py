@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-"""Approximate observed traffic, NOT billing. One poll/import per invocation. Never stores destinations/IPs/node credentials; retains connection IDs for deduplication."""
+"""Approximate observed traffic, NOT billing. Scoped cumulative accounting. Never stores destinations/IPs/node credentials; retains connection IDs for deduplication."""
 
-import argparse
-import datetime
 import http.client
-import json
 import os
 import socket
 import sqlite3
 import stat
-from pathlib import Path
 
 
 def ensure_schema(db, instance, inbound):
@@ -152,112 +148,3 @@ class UnixHTTP(http.client.HTTPConnection):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
         self.sock.connect(self.path)
-
-
-def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--db", required=True, type=Path)
-    src = p.add_mutually_exclusive_group(required=True)
-    src.add_argument("--snapshot", type=Path, help="private local /connections JSON; no network")
-    src.add_argument(
-        "--unix-socket",
-        type=Path,
-        help="existing private local Mihomo controller socket; never creates it",
-    )
-    p.add_argument(
-        "--token-file",
-        type=Path,
-        help="optional existing controller token, never passed as command argument",
-    )
-    p.add_argument(
-        "--inbound", required=True, help="exact metadata.inboundName for intended listener"
-    )
-    p.add_argument(
-        "--users-file",
-        required=True,
-        type=Path,
-        help="JSON array of allowed non-sensitive inbound user labels",
-    )
-    p.add_argument(
-        "--instance",
-        required=True,
-        help="stable non-sensitive server label; one DB per instance/inbound",
-    )
-    a = p.parse_args()
-    db = None
-    try:
-        users = json.loads(a.users_file.read_text())
-        if (
-            not isinstance(users, list)
-            or not users
-            or any(not isinstance(x, str) or not x or len(x) > 128 for x in users)
-        ):
-            raise ValueError()
-        if not a.inbound:
-            raise ValueError()
-        db = private_db(a.db)
-        with db:
-            ensure_schema(db, a.instance, a.inbound)
-        at = datetime.datetime.now(datetime.UTC).isoformat()
-        if a.snapshot:
-            raw = a.snapshot.read_bytes()
-        else:
-            conn = UnixHTTP(str(a.unix_socket))
-            headers = {}
-            if a.token_file:
-                token = a.token_file.read_text().strip()
-                if "\n" in token or "\r" in token:
-                    raise ValueError()
-                headers["Authorization"] = "Bearer " + token
-            try:
-                conn.request("GET", "/connections", headers=headers)
-                response = conn.getresponse()
-                if response.status != 200:
-                    raise ValueError()
-                raw = response.read(8 * 1024 * 1024 + 1)
-            finally:
-                conn.close()
-        if len(raw) > 8 * 1024 * 1024:
-            raise ValueError()
-        ingest(db, json.loads(raw), at, a.inbound, set(users), a.instance)
-        print(
-            "Recorded approximate observed bytes; no destinations/IPs/node credentials stored. Not billing."
-        )
-        for user, up, down in db.execute("SELECT user,up,down FROM totals ORDER BY user"):
-            print(
-                json.dumps(
-                    {"user": user, "observed_upload": up, "observed_download": down},
-                    ensure_ascii=False,
-                )
-            )
-    except Exception:
-        if db:
-            try:
-                scope = db.execute(
-                    "SELECT instance,inbound FROM scope WHERE singleton=1"
-                ).fetchone()
-                if scope == (a.instance, a.inbound):
-                    with db:
-                        db.execute(
-                            "INSERT INTO polls VALUES (?,?,?,?,?)",
-                            (
-                                datetime.datetime.now(datetime.UTC).isoformat(),
-                                "gap/error",
-                                None,
-                                None,
-                                None,
-                            ),
-                        )
-            except sqlite3.Error:
-                pass
-        p.exit(
-            1,
-            "Collection failed; no raw API response or credential printed. Check local source and database.\n",
-        )
-    finally:
-        if db:
-            db.close()
-
-
-if __name__ == "__main__":
-    main()

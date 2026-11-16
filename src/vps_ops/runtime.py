@@ -31,7 +31,7 @@ DEFAULT = {
 def run(args, timeout=25, input=None):
     p = subprocess.run(args, input=input, capture_output=True, text=True, timeout=timeout)
     if p.returncode:
-        raise RuntimeError(f"{args[0]} 执行失败（{p.returncode}）")
+        raise RuntimeError(f"{args[0]} failed ({p.returncode})")
     return p.stdout.strip()
 
 
@@ -53,16 +53,19 @@ def resolver():
     repair()
 
 
-def curl(url, proxy=None, auth=None, resolve=None, user_agent=None):
+def curl(url, proxy=None, auth=None, resolve=None, user_agent=None, *, body=False):
     lines = [
         "silent",
         "show-error",
-        'output = "/dev/null"',
         "connect-timeout = 8",
         "max-time = 20",
-        'write-out = "%{http_code}"',
+        'write-out = "\\n%{http_code}"',
         "url = " + json.dumps(url),
     ]
+    if not body:
+        lines.append('output = "/dev/null"')
+    else:
+        lines.append("max-filesize = 4194304")
     if proxy:
         lines.append("proxy = " + json.dumps(proxy))
     if auth:
@@ -71,16 +74,18 @@ def curl(url, proxy=None, auth=None, resolve=None, user_agent=None):
         lines.append("resolve = " + json.dumps(resolve))
     if user_agent:
         lines.append("user-agent = " + json.dumps(user_agent))
-    code = run(["curl", "--config", "-"], input="\n".join(lines) + "\n")
+    response = run(["curl", "--config", "-"], input="\n".join(lines) + "\n")
+    content, _, code = response.rpartition("\n")
+    code = code or response
+    if len(code) != 3 or not code.isdecimal():
+        raise RuntimeError("Invalid HTTP status")
     if code != "200":
         raise RuntimeError("HTTP " + code)
-    return "HTTP 200"
+    return content if body else "HTTP " + code
 
 
-def filtered_logs(args, c, *, machine=False):
+def journal(args, c, *, machine=False):
     import re
-
-    from .output import format_log
 
     secrets = set()
 
@@ -103,10 +108,10 @@ def filtered_logs(args, c, *, machine=False):
     def redact(value):
         for secret in secrets:
             if secret:
-                value = value.replace(secret, "[隐藏]")
-                value = value.replace(json.dumps(secret, ensure_ascii=False)[1:-1], "[隐藏]")
-        value = re.sub(r"https?://[^\s\"']+", "[URL隐藏]", value)
-        return re.sub(r"/s/(?:auto/)?[A-Za-z0-9_-]{43}[.]yaml", "/s/[隐藏].yaml", value)
+                value = value.replace(secret, "[REDACTED]")
+                value = value.replace(json.dumps(secret, ensure_ascii=False)[1:-1], "[REDACTED]")
+        value = re.sub(r"https?://[^\s\"']+", "[URLREDACTED]", value)
+        return re.sub(r"/s/(?:auto/)?[A-Za-z0-9_-]{43}[.]yaml", "/s/[REDACTED].yaml", value)
 
     def redact_tree(value):
         if isinstance(value, dict):
@@ -133,11 +138,17 @@ def filtered_logs(args, c, *, machine=False):
                         record = json.loads(line)
                     except ValueError:
                         record = {"message": line.rstrip()}
-                    print(json.dumps(redact_tree(record), ensure_ascii=False), flush=True)
+                    yield redact_tree(record)
                 else:
-                    print(format_log(line, redact), end="", flush=True)
-        return process.wait()
+                    yield redact(line)
+        code = process.wait()
+        if code:
+            raise RuntimeError(f"Journal query failed ({code})")
     finally:
         if process.poll() is None:
             process.terminate()
-            process.wait(timeout=5)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()

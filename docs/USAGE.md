@@ -9,7 +9,7 @@ uv run vps-ops deploy init C:/private/node.yaml
 uv run vps-ops deploy apply C:/private/node.yaml
 ```
 
-选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址，使用 `deploy show subscriptions --json` 获取 JSON。 当前自动部署展示一条共享订阅 URL；Windows 和 iPhone 可使用同一 URL，在各自客户端内更新时自动领取对应的身份配置。
+选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址，使用 `deploy show subscriptions --json` 获取 JSON。 当前自动部署展示一条共享订阅 URL；Windows 和 iPhone 可使用同一 URL，更新时均获取 Windows、Apple 共六个节点，设备识别只调整默认选中项。
 
 ## 安装与运行位置
 
@@ -54,7 +54,7 @@ help
 
 连接遵循本机 OpenSSH 配置和主机密钥验证，保活间隔 30 秒，连续失联 6 次后断开。安全密钥在登录时认证。远端必须已安装 vps-ops，且用户 PATH 能找到该命令。
 
-交互会话只接受工具子命令。需要编辑配置或任意系统命令时，保留普通 SSH 终端并直接调用 vps-ops。持续日志期间 Ctrl+C 会结束当前 CLI 进程，通过 connect 登录时需重新连接。
+交互会话只接受工具子命令。需要编辑配置或任意系统命令时，保留普通 SSH 终端并直接调用 vps-ops。交互会话中 Ctrl+C 会停止当前操作并返回提示符，SSH 登录继续保留；单次命令模式则退出进程。
 
 ## 服务器配置
 
@@ -82,7 +82,7 @@ services:
 
 只写需要覆盖的字段即可。subscription_host 必须改为真实订阅域名；subscription_port 为 Caddy HTTPS 端口；subscription_root 为订阅目录。probe_url 必须返回 HTTP 200。frontend_config 指向入口配置，供日志过滤读取已知认证值。services 若提供会替换整个默认列表，也决定服务控制和日志查询允许使用的名称。
 
-自动部署还会写入 mode，取 tailscale、mihomo 或 both。mode 缺省时按 both 处理；未显式提供 services 时根据模式派生服务列表。check all 对未启用能力显示“跳过”，不会把未安装 Mihomo 或 Tailscale 当作故障。
+自动部署还会写入 mode，取 tailscale、mihomo 或 both。mode 缺省时按 both 处理；未显式提供 services 时根据模式派生服务列表。check all 对未启用能力显示 `skip`，不会把未安装 Mihomo 或 Tailscale 当作故障。
 
 全局参数放在子命令之前：
 
@@ -92,7 +92,7 @@ vps-ops --json check dns
 vps-ops --json usage report
 ```
 
-JSON 支持 status、check、DNS 结果、usage report、logs、packages list 和订阅地址。交互会话内可写为 `--json check`，也可以使用 `status --json`、`usage report --json` 或 `logs caddy --json`。自定义服务器配置的会话从普通 SSH 终端启动：`vps-ops --config /private/ops.yaml shell`。connect 使用远端默认配置。
+CLI 的帮助、提示、错误和报告统一使用英文。JSON 支持状态、检查、用量、配置与成员生成、订阅策略、证书、监听等待和订阅地址；`logs --json` 按行输出 JSON，持续部署与系统维护使用进度输出。交互会话内可写为 `--json check`，也可以使用 `status --json`、`usage report --json` 或 `logs caddy --json`。自定义服务器配置的会话从普通 SSH 终端启动：`vps-ops --config /private/ops.yaml shell`。connect 使用远端默认配置。
 
 ## 状态和功能检查
 
@@ -125,22 +125,22 @@ vps-ops check tailscale
 | `--errors`       | 最近 24 小时的系统错误数量                 |
 | `--all`          | 查看全部分类                               |
 
-分类参数可以组合，例如 `status --network --firewall`。`--service` 可与其他分类组合，限制服务列表；同名服务允许带或不带 `.service` 后缀。`status --help` 显示参数说明。报告中的“读取失败”表示该项采集未成功，其他项目仍会显示。
+分类参数可以组合，例如 `status --network --firewall`。`--service` 可与其他分类组合，限制服务列表；同名服务允许带或不带 `.service` 后缀。`status --help` 显示参数说明。报告中的 `Query failed`表示该项采集未成功，其他项目仍会显示。
 
-`--json` 输出所选范围的机器数据，和文本显示的数据来源一致。`--json status` 现在输出默认概览；需要原先的完整字段时，使用 `--json status --all`。完整 JSON 中的 `服务` 值保留原有 systemd 字段格式。
+`--json` 输出所选范围的机器数据，和文本显示的数据来源一致。`--json status` 现在输出默认概览；需要原先的完整字段时，使用 `--json status --all`。完整 JSON 使用英文键，如 `system`、`services`、`memory`、`boot_id`、`reboot_required`；`services` 的值保留 systemd 字段格式。
 
 check 默认等同 check all，单项失败后继续检查其他项：
 
-| 范围         | 实际检查                                                                                                |
-| ------------ | ------------------------------------------------------------------------------------------------------- |
-| all          | 配置服务均 active，并执行以下全部检查                                                                   |
-| dns          | 两个网络空间解析 www.cloudflare.com，并访问 probe_url                                                   |
-| proxy        | 两个认证 SOCKS 出口、Windows 队列与捕获、iPhone eBPF，以及三个协议各一个订阅节点的临时客户端 HTTPS 请求 |
-| subscription | 对目录中每份 YAML 请求 /s/文件名，连接本机 Caddy，校验域名和 TLS，要求 HTTP 200                         |
-| certificate  | Mihomo 运行凭据中的证书主机名和有效期，要求剩余超过 7 天                                                |
-| tailscale    | 本机 Tailscale BackendState 为 Running                                                                  |
+| 范围         | 实际检查                                                                                                         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| all          | 配置服务均 active，并执行以下全部检查                                                                            |
+| dns          | 两个网络空间解析 www.cloudflare.com，并访问 probe_url                                                            |
+| proxy        | 两个认证 SOCKS 出口、Windows 队列与捕获、iPhone eBPF，以及Windows、Apple 两套身份的三个协议临时客户端 HTTPS 请求 |
+| subscription | 校验域名、TLS、HTTP 状态与实际配置内容；统一订阅验证双身份三协议凭据、TCP 出口规则、设备默认项及未识别设备回退   |
+| certificate  | Mihomo 运行凭据中的证书主机名和有效期，要求剩余超过 7 天                                                         |
+| tailscale    | 本机 Tailscale BackendState 为 Running                                                                           |
 
-结果显示“通过”“警告”“失败”或“跳过”；警告表示仍需操作，例如批准 Tailscale 出口能力。JSON 每项包含 name、state、detail。check 成功返回 0，有失败返回 1。参数错误通常返回 2；底层命令可能保留自己的退出码。status 返回成功表示报告生成，仍需阅读其中的失败状态。
+结果的 `state` 为 `pass`、`warning`、`fail` 或 `skip`；`warning` 表示仍需操作，例如批准 Tailscale 出口能力。JSON 每项包含 name、state、detail。check 成功返回 0，有失败返回 1。参数错误通常返回 2；底层命令可能保留自己的退出码。status 返回成功表示报告生成，仍需阅读其中的失败状态。
 
 完整检查使用项目当前部署：网络空间 tcpfp-windows-test 和 tcpfp-ios-test，指纹工具在 /usr/local/lib/tcpfp，Mihomo 在 /usr/local/bin/mihomo。两个后端须运行并提供 systemd 凭据；订阅中须有 vless、hysteria2、anytls 节点。临时客户端配置结束后删除。协议探测从服务器发起；设备到 VPS 的连接问题还需在对应设备重现。
 
@@ -229,7 +229,7 @@ vps-ops profile generate /private/node.json /private/profile.yaml --policy /priv
 vps-ops profile generate /private/node.json /private/provider.yaml --kind provider
 ```
 
-默认 --kind profile 生成完整配置，必须提供 --policy。provider 只输出节点列表，可被其他配置引用。此离线命令不会检测设备，也不会为单个 UUID 自动生成两套服务器认证身份。自动部署生成的远程订阅提供一个共享链接，下载时通过客户端 User-Agent 在已有 WIN/Apple 身份间选择。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
+默认 --kind profile 生成完整配置，必须提供 --policy。provider 只输出节点列表，可被其他配置引用。此离线命令不会检测设备，也不会为单个 UUID 自动生成两套服务器认证身份。自动部署生成的远程订阅提供一个共享链接，始终提供已有 Windows、Apple 全部身份；下载时根据 User-Agent 调整默认选择，未识别设备仍可手动选择。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
 
 ## 创建成员材料
 
@@ -239,7 +239,7 @@ vps-ops profile generate /private/node.json /private/provider.yaml --kind provid
 vps-ops member create /private/server.json tablet /private/tablet --policy /private/rules.yaml
 ```
 
-标签为 1 至 40 位字母、数字、下划线或连字符。新成员生成与平台注册分离；此命令只生成待注册凭据，自动切换 WIN/Apple 出口需服务端已经给该订阅持有者配置相应的两套身份。输出目录必须不存在，父目录已存在。生成：
+标签为 1 至 40 位字母、数字、下划线或连字符。新成员生成与平台注册分离；此命令只生成待注册凭据，自动切换 Windows/Apple 出口需服务端已经给该订阅持有者配置相应的两套身份。输出目录必须不存在，父目录已存在。生成：
 
 | 文件                     | 用途                             |
 | ------------------------ | -------------------------------- |

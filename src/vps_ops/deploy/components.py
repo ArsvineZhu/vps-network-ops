@@ -28,7 +28,7 @@ def download(spec, path):
     with urllib.request.urlopen(spec[0], timeout=60) as response:
         data = response.read()
     if hashlib.sha256(data).hexdigest() != spec[1]:
-        raise RuntimeError("下载校验失败")
+        raise RuntimeError("Download checksum mismatch")
     path.write_bytes(data)
 
 

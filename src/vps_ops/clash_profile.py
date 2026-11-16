@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """Generate a local Mihomo profile from a private JSON node descriptor. Fixed VLESS TCP REALITY xtls-rprx-vision; no networking."""
 
-import argparse
 import base64
 import ipaddress
 import json
 import os
 import re
 import uuid
-from pathlib import Path
 
 import yaml
 
@@ -16,8 +14,8 @@ from .subscription_policy import configure
 
 
 def generate(d, *, target=None):
-    if target not in (None, "WIN", "Apple"):
-        raise ValueError("target must be WIN or Apple")
+    if target not in (None, "Windows", "Apple"):
+        raise ValueError("target must be Windows or Apple")
     required = {"server", "port", "uuid", "servername", "public_key", "short_id"}
     if not isinstance(d, dict) or not required <= d.keys():
         raise ValueError("missing required descriptor fields")
@@ -60,7 +58,7 @@ def generate(d, *, target=None):
         or len(name) > 80
         or any(ord(c) < 32 for c in name)
         or name.startswith("Route-")
-        or name in {"DIRECT", "REJECT", "GLOBAL", "节点"}
+        or name in {"DIRECT", "REJECT", "GLOBAL", "Nodes"}
     ):
         raise ValueError("invalid node name")
     fp = d.get("fingerprint", "ios" if target == "Apple" else "chrome")
@@ -80,11 +78,11 @@ def generate(d, *, target=None):
         "client-fingerprint": fp,
         "reality-opts": {"public-key": key, "short-id": sid},
     }
-    tun = {"enable": True}
-    if target == "WIN":
+    tun: dict[str, bool | str | list[str]] = {"enable": True}
+    if target == "Windows":
         tun.update(
             {
-                "stack": "mips",
+                "stack": "mixed",
                 "auto-route": True,
                 "auto-detect-interface": True,
                 "strict-route": True,
@@ -105,56 +103,34 @@ def generate(d, *, target=None):
             "ipv6": False,
             "enhanced-mode": "fake-ip",
             "fake-ip-filter": ["+.lan", "+.local"],
-            "nameserver": ["https://1.1.1.1/dns-query#节点"],
+            "nameserver": ["https://1.1.1.1/dns-query#Nodes"],
             "proxy-server-nameserver": ["https://1.1.1.1/dns-query"],
         },
         "proxies": [node],
         "proxy-groups": [
-            {"name": "节点", "type": "select", "proxies": [name], "default-selected": name}
+            {"name": "Nodes", "type": "select", "proxies": [name], "default-selected": name}
         ],
-        "rules": ["MATCH,节点"],
+        "rules": ["MATCH,Nodes"],
     }
 
 
-def main():
-    p = argparse.ArgumentParser(description="从节点信息生成客户端配置")
-    p.add_argument("descriptor", type=Path, help="节点信息 JSON 文件")
-    p.add_argument("output", type=Path, help="尚不存在的输出文件")
-    p.add_argument(
-        "--policy",
-        type=Path,
-        help="完整配置使用的共享路由策略文件",
-    )
-    p.add_argument(
-        "--kind",
-        choices=["profile", "provider"],
-        default="profile",
-        help="profile 为完整配置，provider 为节点提供者文件",
-    )
-    a = p.parse_args()
-    if a.kind == "profile" and not a.policy:
-        p.error("生成完整配置需要 --policy")
+def generate_file(descriptor, output, *, policy=None, kind="profile"):
+    if kind == "profile" and policy is None:
+        raise ValueError("A complete profile requires --policy")
     try:
-        profile = generate(json.loads(a.descriptor.read_text(encoding="utf-8-sig")))
-        if a.kind == "provider":
+        profile = generate(json.loads(descriptor.read_text(encoding="utf-8-sig")))
+        if kind == "provider":
             profile = {"proxies": profile["proxies"]}
         else:
-            profile = configure(profile, yaml.safe_load(a.policy.read_text(encoding="utf-8")))
-        # Exclusive creation prevents overwriting or following an existing symlink.
-        fd = os.open(a.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(profile, f, ensure_ascii=False, indent=2)
-            f.write("\n")
-    except (ValueError, TypeError, KeyError, OSError, yaml.YAMLError) as e:
-        # Exception messages from parsing may contain credentials; print type only.
-        p.exit(1, "生成失败（" + type(e).__name__ + "）。请检查节点信息和输出路径。\n")
-    if a.kind == "provider":
-        print("已生成节点提供者文件，请在客户端配置中引用。")
-    else:
-        print("已生成客户端配置，请在客户端导入并启用。")
-    if os.name == "nt":
-        print("请检查输出目录的 Windows 访问权限（ACL）。")
-
-
-if __name__ == "__main__":
-    main()
+            if policy is None:
+                raise ValueError("A complete profile requires --policy")
+            profile = configure(profile, yaml.safe_load(policy.read_text(encoding="utf-8")))
+        fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(profile, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+    except (ValueError, TypeError, KeyError, OSError, yaml.YAMLError) as exc:
+        raise RuntimeError(
+            "Profile generation failed; check the descriptor and output path"
+        ) from exc
+    return {"kind": kind, "output": str(output)}

@@ -7,7 +7,7 @@ import time
 
 def ssh_command(target, port=None, user=None, identity=None, tty=False, key_only=False):
     if not target or target.startswith("-"):
-        raise ValueError("SSH 目标无效")
+        raise ValueError("Invalid SSH target")
     result = [
         "ssh",
         "-tt" if tty else "-T",
@@ -43,4 +43,4 @@ def wait_ssh(command, seconds):
         except OSError:
             pass
         time.sleep(min(2, max(0, deadline - time.monotonic())))
-    raise RuntimeError("等待 SSH 恢复超时")
+    raise RuntimeError("Timed out waiting for SSH")

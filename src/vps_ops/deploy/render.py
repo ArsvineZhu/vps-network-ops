@@ -1,6 +1,7 @@
 """Generate a node's durable identity and existing service configuration."""
 
 import base64
+import copy
 import json
 import os
 import secrets
@@ -107,7 +108,8 @@ def render(c, assets):
     policy["base-url"] = "https://" + c["domain"] + ":9443"
     policy["variables"].update(server_ipv4=c["public_ipv4"], ssh_port=c["port"])
     save("/etc/vps-rules/rules.yaml", yaml.safe_dump(policy))
-    for r, target, ip in (("windows", "WIN", "10.203.1.2"), ("ios", "Apple", "10.203.2.2")):
+    profiles = {}
+    for r, target, ip in (("windows", "Windows", "10.203.1.2"), ("ios", "Apple", "10.203.2.2")):
         user = state["roles"][r]
         backend = yaml.safe_load(text("tcpfp/backend.example.yaml"))
         backend["listeners"][0].update(
@@ -142,12 +144,23 @@ def render(c, assets):
             )
         profile["proxy-groups"][0]["proxies"] = [n["name"] for n in profile["proxies"]]
         profile = configure(profile, policy)
+        profiles[target] = profile
         root = Path("/srv/vps-subscriptions")
-        for name in (user["token"] + ".yaml", state["auto_token"] + "." + target + ".yaml"):
-            path = root / name
-            write_profile(path, profile)
-            os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
-            path.chmod(0o640)
+        path = root / (user["token"] + ".yaml")
+        write_profile(path, profile)
+        os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
+        path.chmod(0o640)
+    for target in (None, "Windows", "Apple"):
+        profile = copy.deepcopy(profiles[target or "Apple"])
+        profile["proxies"] = profiles["Windows"]["proxies"] + profiles["Apple"]["proxies"]
+        primary = next(g for g in profile["proxy-groups"] if g["name"] == "Nodes")
+        primary["proxies"] = [n["name"] for n in profile["proxies"]]
+        primary["default-selected"] = (target or "Windows") + " · VLESS"
+        name = state["auto_token"] + ("." + target if target else "") + ".yaml"
+        path = root / name
+        write_profile(path, profile)
+        os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
+        path.chmod(0o640)
     save(
         "/etc/vps-ops/subscriptions.json",
         {"auto": "https://" + c["domain"] + ":9443/s/auto/" + state["auto_token"] + ".yaml"},

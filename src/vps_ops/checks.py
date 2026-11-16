@@ -15,14 +15,14 @@ def _checks(c, section):
 
     def check(name, fn):
         try:
-            results.append(dict(name=name, state="通过", detail=str(fn())))
+            results.append(dict(name=name, state="pass", detail=str(fn())))
         except CheckWarning as exc:
-            results.append(dict(name=name, state="警告", detail=str(exc)))
+            results.append(dict(name=name, state="warning", detail=str(exc)))
         except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as e:
             results.append(
                 dict(
                     name=name,
-                    state="失败",
+                    state="fail",
                     detail=str(e) if isinstance(e, RuntimeError) else type(e).__name__,
                 )
             )
@@ -37,11 +37,11 @@ def _checks(c, section):
                 check(
                     ns + " DNS",
                     lambda n=ns: (
-                        "解析成功"
+                        "Resolved"
                         if run(
                             ["ip", "netns", "exec", n, "getent", "ahostsv4", "www.cloudflare.com"]
                         )
-                        else (_ for _ in ()).throw(RuntimeError("解析结果为空"))
+                        else (_ for _ in ()).throw(RuntimeError("DNS returned no addresses"))
                     ),
                 )
                 check(
@@ -96,7 +96,7 @@ def _checks(c, section):
                 ),
             )
             check(
-                "Windows 捕获",
+                "Windows capture",
                 lambda: (
                     run(
                         [
@@ -111,13 +111,13 @@ def _checks(c, section):
                             "/etc/tcpfp/syn-windows.json",
                         ]
                     )
-                    or "正常"
+                    or "OK"
                 ),
             )
             check(
                 "iPhone eBPF",
                 lambda: (
-                    "已挂载"
+                    "Attached"
                     if "tc_ios"
                     in run(
                         [
@@ -133,15 +133,21 @@ def _checks(c, section):
                             "egress",
                         ]
                     )
-                    else (_ for _ in ()).throw(RuntimeError("程序未挂载"))
+                    else (_ for _ in ()).throw(RuntimeError("Program is not attached"))
                 ),
             )
     if section in ("all", "proxy"):
         from .probes import frontend
 
-        for protocol in ("vless", "hysteria2", "anytls"):
-            check(protocol + " 入口认证", lambda protocol=protocol: frontend(c, protocol))
+        for target in ("Windows", "Apple"):
+            for protocol in ("vless", "hysteria2", "anytls"):
+                check(
+                    target + " " + protocol + " authentication",
+                    lambda protocol=protocol, target=target: frontend(c, protocol, target),
+                )
     if section in ("all", "subscription"):
+        from .probes import subscription
+
         host = c["subscription_host"]
         port = c["subscription_port"]
         files = [
@@ -150,12 +156,15 @@ def _checks(c, section):
             if re.fullmatch(r"[A-Za-z0-9_-]{43}[.]yaml", p.name)
         ]
         if not files:
-            check("订阅", lambda: (_ for _ in ()).throw(RuntimeError("订阅文件不存在")))
+            check(
+                "Subscription",
+                lambda: (_ for _ in ()).throw(RuntimeError("Subscription files do not exist")),
+            )
         for i, p in enumerate(files):
             check(
-                f"订阅 {i + 1}",
-                lambda f=p, host=host, port=port: curl(
-                    f"https://{host}:{port}/s/{f.name}", resolve=f"{host}:{port}:127.0.0.1"
+                f"Subscription {i + 1}",
+                lambda f=p, host=host, port=port: subscription(
+                    c, f"https://{host}:{port}/s/{f.name}", f
                 ),
             )
         auto = Path("/etc/vps-ops/subscriptions.json")
@@ -164,14 +173,22 @@ def _checks(c, section):
             if url:
                 for role, agent in (
                     ("Apple", "clash.meta/1.19 Clash/v1 Darwin/25.0 iPhone18,2"),
-                    ("WIN", "clash-verge/v2.5.10"),
+                    ("Windows", "clash-verge/v2.5.10"),
+                    ("", "curl/8.11.0"),
                 ):
                     check(
-                        "自动订阅 " + role,
-                        lambda u=url, a=agent: curl(
+                        "Automatic subscription " + (role or "Unknown platform"),
+                        lambda u=url, a=agent, r=role: subscription(
+                            c,
                             u,
-                            resolve=f"{host}:{port}:127.0.0.1",
+                            Path(c["subscription_root"])
+                            / (
+                                u.rsplit("/", 1)[-1].removesuffix(".yaml")
+                                + ("." + r if r else "")
+                                + ".yaml"
+                            ),
                             user_agent=a,
+                            target=r,
                         ),
                     )
     if section in ("all", "certificate"):
@@ -186,7 +203,7 @@ def _checks(c, section):
                 raise RuntimeError(str(exc)) from exc
             return run(["openssl", "x509", "-in", path, "-noout", "-dates"])
 
-        check("证书", cert)
+        check("Certificate", cert)
     if section in ("all", "tailscale"):
 
         def ts():
@@ -196,8 +213,8 @@ def _checks(c, section):
             if c.get("mode") in ("tailscale", "both") and not state.get("Self", {}).get(
                 "ExitNodeOption", False
             ):
-                raise CheckWarning("已登录，等待控制台批准出口节点")
-            return "在线，出口能力已批准" if c.get("mode") else "在线"
+                raise CheckWarning("Signed in; awaiting exit-node approval in the console")
+            return "Online; exit-node capability approved" if c.get("mode") else "Online"
 
         check("Tailscale", ts)
     return results
@@ -212,15 +229,19 @@ def checks(c, section):
         enabled.append("tailscale")
     if section != "all":
         if section not in enabled:
-            return [dict(name=section, state="跳过", detail="此节点未启用该能力")]
+            return [
+                dict(
+                    name=section, state="skip", detail="This capability is not enabled on this node"
+                )
+            ]
         return _checks(c, section)
     result = []
     for unit in c["services"]:
         try:
             run(["systemctl", "is-active", unit])
-            result.append(dict(name=unit, state="通过", detail="active"))
+            result.append(dict(name=unit, state="pass", detail="active"))
         except (RuntimeError, OSError, subprocess.SubprocessError):
-            result.append(dict(name=unit, state="失败", detail="服务未运行"))
+            result.append(dict(name=unit, state="fail", detail="Service is not running"))
     for part in ("dns", "proxy", "subscription", "certificate", "tailscale"):
         result.extend(checks(c, part))
     return result

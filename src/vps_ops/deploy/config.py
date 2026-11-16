@@ -19,7 +19,7 @@ MODES = ("tailscale", "mihomo", "both")
 
 def services(mode):
     if mode not in MODES:
-        raise ValueError("mode 必须是 tailscale、mihomo 或 both")
+        raise ValueError("mode must be tailscale, mihomo or both")
     return [
         s
         for s in SERVICES
@@ -30,35 +30,35 @@ def services(mode):
 def load(path):
     c = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     if not isinstance(c, dict) or c.get("mode") not in MODES:
-        raise ValueError("部署模式无效")
+        raise ValueError("Invalid deployment mode")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]*", c.get("target", "")):
-        raise ValueError("SSH 目标无效")
+        raise ValueError("Invalid SSH target")
     if (
         not isinstance(c.get("port", 22), int)
         or isinstance(c.get("port", 22), bool)
         or not 1 <= c.get("port", 22) <= 65535
     ):
-        raise ValueError("SSH 端口无效")
+        raise ValueError("Invalid SSH port")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", c.get("name", "vps-node")):
-        raise ValueError("节点名称应为不超过 63 位的小写字母、数字、连字符")
+        raise ValueError("Node name must contain at most 63 lowercase letters, digits or hyphens")
     public = Path(c["public_key"]).expanduser()
     c["authorized_key"] = public.read_text().strip()
     if not re.fullmatch(
         r"(?:ssh-|ecdsa-|sk-)[^\s]+ [A-Za-z0-9+/=]+(?: [^\n]*)?", c["authorized_key"]
     ):
-        raise ValueError("需要 OpenSSH 公钥")
+        raise ValueError("An OpenSSH public key is required")
     if c["mode"] != "tailscale":
         ipaddress.IPv4Address(c["public_ipv4"])
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]+", c["domain"]):
-            raise ValueError("订阅域名无效")
+            raise ValueError("Invalid subscription domain")
         if not isinstance(c.get("email"), str) or "@" not in c["email"]:
-            raise ValueError("需要 ACME 联系邮箱")
+            raise ValueError("An ACME contact email is required")
         provider = c["dns_provider"]
         plugin, names = DNS.get(provider, (provider, c.get("dns_credentials", [])))
         if not re.fullmatch(r"dns_[a-zA-Z0-9_]+", plugin) or not names:
-            raise ValueError("需要 DNS 插件及凭据字段")
+            raise ValueError("DNS plugin and credential fields are required")
         if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", n) for n in names):
-            raise ValueError("DNS 凭据字段无效")
+            raise ValueError("Invalid DNS credential field")
         c["dns_plugin"], c["dns_names"] = plugin, names
     c.setdefault("name", "vps-node")
     c.setdefault("port", 22)

@@ -18,7 +18,7 @@ def test_tailscale_needs_no_domain_or_dns_credentials(tmp_path):
     c = load(config)
     assert c["services"] == ["tailscaled"]
     assert "dns_names" not in c
-    assert checks(c, "proxy")[0]["state"] == "跳过"
+    assert checks(c, "proxy")[0]["state"] == "skip"
 
 
 def test_deployment_mode_must_enable_a_capability():
@@ -57,10 +57,10 @@ def test_mihomo_mode_does_not_require_tailscale(monkeypatch):
 
     monkeypatch.setattr(module, "run", lambda args: "active")
     monkeypatch.setattr(
-        module, "_checks", lambda c, section: [{"name": section, "state": "通过", "detail": "ok"}]
+        module, "_checks", lambda c, section: [{"name": section, "state": "pass", "detail": "ok"}]
     )
     result = module.checks({"mode": "mihomo", "services": ["mihomo"]}, "all")
-    assert next(x for x in result if x["name"] == "tailscale")["state"] == "跳过"
+    assert next(x for x in result if x["name"] == "tailscale")["state"] == "skip"
 
 
 def test_wait_requires_an_ssh_banner_not_only_an_open_port(monkeypatch):
@@ -104,7 +104,7 @@ def test_diagnostics_redact_subscription_paths_and_known_credentials(monkeypatch
     import subprocess
     from types import SimpleNamespace
 
-    from vps_ops.runtime import filtered_logs
+    from vps_ops.runtime import journal
 
     config = tmp_path / "frontend.yaml"
     config.write_text("password: sample-credential\n")
@@ -112,8 +112,12 @@ def test_diagnostics_redact_subscription_paths_and_known_credentials(monkeypatch
     record = f"caddy request /s/auto/{token}.yaml password=sample-credential status=200\n"
     process = SimpleNamespace(stdout=io.StringIO(record), wait=lambda: 0, poll=lambda: 0)
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: process)
-    filtered_logs(["journalctl"], {"frontend_config": str(config)})
-    output = capsys.readouterr().out
+    lines = []
+    for record in journal(["journalctl"], {"frontend_config": str(config)}):
+        assert isinstance(record, str)
+        lines.append(record)
+    output = "".join(lines)
+    assert capsys.readouterr().out == ""
     assert token not in output
     assert "sample-credential" not in output
     assert "status=200" in output

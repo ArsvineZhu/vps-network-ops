@@ -21,9 +21,9 @@ def test_partial_failure_keeps_other_results(monkeypatch):
 
     monkeypatch.setattr(checks, "run", command)
     result = checks.checks(runtime.DEFAULT, "dns")
-    assert any(r["state"] == "失败" for r in result)
-    assert any(r["state"] == "通过" for r in result)
-    assert all("TimeoutExpired" in r["detail"] for r in result if r["state"] == "失败")
+    assert any(r["state"] == "fail" for r in result)
+    assert any(r["state"] == "pass" for r in result)
+    assert all("TimeoutExpired" in r["detail"] for r in result if r["state"] == "fail")
 
 
 def test_proxy_secret_only_in_stdin(monkeypatch):

@@ -1,211 +1,168 @@
-"""Unified VPS operations."""
+"""CLI orchestration: parse input, call operations, and present results."""
 
-import argparse
-import importlib
-import json
 import os
 import shlex
 import subprocess
 import sys
 
+import yaml
+
+from . import arguments, output, status
 from .checks import checks
-from .output import emit
-from .runtime import config, resolver, run
-
-
-def dispatch_module(module, args):
-    original = sys.argv
-    try:
-        sys.argv = ["vps-ops " + module, *args]
-        return importlib.import_module("vps_ops." + module).main() or 0
-    finally:
-        sys.argv = original
+from .runtime import config, journal, resolver, run
 
 
 def execute(argv):
-    p = argparse.ArgumentParser(prog="vps-ops", description="VPS 检查与运维")
-    p.add_argument("--config", default="/etc/vps-ops/config.yaml")
-    p.add_argument("--json", action="store_true")
-    p.add_argument(
-        "command",
-        choices=[
-            "deploy",
-            "connect",
-            "shell",
-            "status",
-            "check",
-            "logs",
-            "usage",
-            "dns",
-            "service",
-            "packages",
-            "reboot",
-            "member",
-            "profile",
-            "subscription",
-            "certificate",
-            "controller",
-            "wait",
-        ],
-    )
-    command_index = next((i for i, arg in enumerate(argv) if arg in p._actions[-1].choices), None)
-    if command_index is None:
-        a = p.parse_args(argv)
-        rest = []
-    else:
-        a = p.parse_args(argv[: command_index + 1])
-        rest = argv[command_index + 1 :]
+    try:
+        return _execute(argv)
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        RuntimeError,
+        subprocess.SubprocessError,
+        yaml.YAMLError,
+    ) as exc:
+        output.error(exc)
+        return 1
+
+
+def _execute(argv):
+    parser = arguments.parser()
+    a = parser.parse_args(argv)
     cmd = a.command
     if cmd == "deploy":
-        from .deploy.client import main as deploy_main
+        from . import prompts
+        from .deploy import client
 
-        deploy_main(rest, machine=a.json)
-        return 0
-    if cmd in ("member", "profile", "subscription", "certificate"):
-        expected, module = {
-            "member": ("create", "new_member"),
-            "profile": ("generate", "clash_profile"),
-            "subscription": ("apply", "subscription_policy"),
-            "certificate": ("check", "certificate_check"),
-        }[cmd]
-        if not rest or rest.pop(0) != expected:
-            p.error(f"需要 {cmd} {expected}")
-        return dispatch_module(module, rest)
-    if cmd == "usage":
-        if not rest or rest[0] not in ("report", "serve"):
-            p.error("usage report|serve")
-        if rest[0] == "serve":
-            dispatch_module("usage_daemon", ["--serve", *rest[1:]])
+        if a.action == "init":
+            data = client.init(a.deployment, prompts.deployment())
+            output.emit(data, a.json, view="init")
+        elif a.action == "apply":
+            client.apply(
+                a.deployment,
+                prompt_secret=prompts.dns_secret,
+                notify=output.notice,
+                stream=output.write_line,
+            )
+        elif a.deployment == "subscriptions":
+            output.emit(client.subscriptions(), a.json, view="subscriptions")
         else:
-            import contextlib
-            import io
+            parser.error("deploy show only supports subscriptions")
+        return 0
+    if cmd == "member":
+        from .new_member import create
 
-            report_args = rest[1:]
-            report_json = "--json" in report_args
-            if report_json:
-                report_args.remove("--json")
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                dispatch_module("usage_daemon", ["--report", *report_args])
-            emit(json.loads(buf.getvalue()), a.json or report_json, view="usage")
+        output.emit(create(a.public_template, a.member, a.output, a.policy), a.json, view="member")
+        return 0
+    if cmd == "profile":
+        from .clash_profile import generate_file
+
+        if a.kind == "profile" and not a.policy:
+            parser.error("A complete profile requires --policy")
+        output.emit(
+            generate_file(a.descriptor, a.output, policy=a.policy, kind=a.kind),
+            a.json,
+            view="profile",
+        )
+        return 0
+    if cmd == "subscription":
+        from .subscription_policy import apply
+
+        if bool(a.profile) == bool(a.directory) or (a.directory and a.output):
+            parser.error("Choose either a subscription file or a directory")
+        output.emit(
+            apply(a.policy, profile=a.profile, directory=a.directory, output=a.output),
+            a.json,
+            view="subscription",
+        )
+        return 0
+    if cmd == "certificate":
+        from .certificate_check import check
+
+        try:
+            data = check(a.cert, a.hostname, a.min_days)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from None
+        output.emit(data, a.json, view="certificate")
+        return 0
+    if cmd == "usage":
+        from .usage_daemon import read_report, serve
+
+        if a.action == "serve":
+            serve(a.collector_config)
+        else:
+            output.emit(read_report(a.collector_config), a.json, view="usage")
         return 0
     if cmd == "controller":
-        if rest != ["check-directory"]:
-            p.error("controller check-directory")
-        importlib.import_module("vps_ops.check_socket_dir").main()
+        from .check_socket_dir import check
+
+        output.emit(check(), a.json, view="controller")
         return 0
     if cmd == "wait":
-        if not rest or rest.pop(0) != "listener":
-            p.error("wait listener")
-        sys.argv = ["wait listener", *rest]
-        importlib.import_module("vps_ops.wait_listener").main()
+        from .wait_listener import wait
+
+        output.emit(wait(a.service, a.port, a.seconds), a.json, view="listener")
         return 0
     if cmd == "connect":
-        cp = argparse.ArgumentParser(prog="vps-ops connect")
-        cp.add_argument("target")
-        cp.add_argument("--port", type=int)
-        cp.add_argument("--user")
-        cp.add_argument("--identity")
-        cp.add_argument("--wait", type=float, default=0)
-        x = cp.parse_args(rest)
         from .transport import ssh_command, wait_ssh
 
-        args = ssh_command(x.target, port=x.port, user=x.user, identity=x.identity, tty=True)
-        if x.wait:
-            wait_ssh(args, x.wait)
+        args = ssh_command(a.target, port=a.port, user=a.user, identity=a.identity, tty=True)
+        if a.wait:
+            wait_ssh(args, a.wait)
         return subprocess.call([*args, "vps-ops shell"])
     if cmd == "shell":
-        while True:
-            try:
-                line = input("vps-ops> ")
-            except EOFError:
-                return 0
-            if line.strip() in ("exit", "quit"):
-                return 0
-            if line.strip() == "help":
-                line = "--help"
-            if not line.strip():
-                continue
-            try:
-                execute(["--config", a.config, *shlex.split(line)])
-            except SystemExit:
-                pass
-            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as e:
-                print(
-                    type(e).__name__ + ": 操作失败" if not isinstance(e, RuntimeError) else str(e),
-                    file=sys.stderr,
-                )
+        return shell(a.config)
+    c = config(a.config)
     if cmd == "status":
-        from . import status
-
-        options = status.arguments(rest)
-        c = config(a.config)
         try:
-            selected_services = status.select_services(options.service or [], c["services"])
+            selected_services = status.select_services(a.service or [], c["services"])
         except ValueError as exc:
-            p.error(str(exc))
-        sections = set(status.SECTIONS) if options.all else set(options.sections or [])
+            parser.error(str(exc))
+        sections = set(status.SECTIONS) if a.all else set(a.sections or [])
         summary = not sections and not selected_services
         if selected_services:
             sections.add("services")
         data = status.collect(
             c["services"], sections, summary=summary, selected_services=selected_services
         )
-        emit(data, a.json or options.json, view="status", summary=summary)
+        output.emit(data, a.json, view="status", summary=summary)
         return 0
-    c = config(a.config)
-    if cmd == "check" or cmd == "dns" and rest == ["diagnose"]:
-        section = rest[0] if cmd == "check" and rest else "dns" if cmd == "dns" else "all"
-        if section not in ("all", "dns", "proxy", "subscription", "certificate", "tailscale"):
-            p.error("未知检查")
-        result = checks(c, section)
-        emit(result, a.json)
-        return int(any(r["state"] == "失败" for r in result))
-    if cmd == "dns":
-        if rest != ["repair"]:
-            p.error("dns diagnose|repair")
-        resolver()
-        result = checks(c, "dns")
-        emit(result, a.json)
-        return int(any(x["state"] == "失败" for x in result))
+    if cmd in ("check", "dns"):
+        if cmd == "dns" and a.action == "repair":
+            resolver()
+        result = checks(c, a.section if cmd == "check" else "dns")
+        output.emit(result, a.json)
+        return int(any(item["state"] == "fail" for item in result))
     if cmd == "logs":
-        lp = argparse.ArgumentParser()
-        lp.add_argument("service")
-        lp.add_argument("--since", default="24 hours ago")
-        lp.add_argument("--lines", type=int, default=50)
-        lp.add_argument("--follow", action="store_true")
-        lp.add_argument("--json", action="store_true", help="逐行输出 JSON 日志")
-        x = lp.parse_args(rest)
-        if x.service.removesuffix(".service") not in c["services"]:
-            p.error("未知服务")
-        args = ["journalctl", "-u", x.service, "--since", x.since, "-n", str(x.lines), "--no-pager"]
-        machine = a.json or x.json
-        if machine:
+        if a.service.removesuffix(".service") not in c["services"]:
+            parser.error("Service is not configured")
+        args = ["journalctl", "-u", a.service, "--since", a.since, "-n", str(a.lines), "--no-pager"]
+        if a.json:
             args += ["-o", "json"]
-        if x.follow:
+        if a.follow:
             args.append("-f")
-        from .runtime import filtered_logs
-
-        return filtered_logs(args, c, machine=machine)
+        records = journal(args, c, machine=a.json)
+        try:
+            for record in records:
+                output.emit_log(record, machine=a.json)
+        finally:
+            records.close()
+        return 0
     if cmd == "service":
-        if (
-            len(rest) != 2
-            or rest[0] not in ("status", "start", "stop", "restart")
-            or rest[1] not in c["services"]
-        ):
-            p.error("service <操作> <已配置服务>")
-        if rest[0] == "status":
-            return subprocess.call(["systemctl", *rest, "--full", "--no-pager", "--lines=0"])
-        return subprocess.call(["systemctl", *rest, "--no-pager"])
+        if a.service not in c["services"]:
+            parser.error("Service is not configured")
+        args = ["systemctl", a.action, a.service, "--no-pager"]
+        if a.action == "status":
+            args += ["--full", "--lines=0"]
+        return subprocess.call(args)
     if cmd == "packages":
-        if rest == ["list"]:
-            emit({"更新": run(["apt", "list", "--upgradable"])}, a.json, view="status")
+        if a.action == "list":
+            output.emit({"updates": run(["apt", "list", "--upgradable"])}, a.json, view="status")
             return 0
-        if rest != ["upgrade"]:
-            p.error("packages list|upgrade")
-        audit = run(["dpkg", "--audit"])
-        if audit:
-            raise RuntimeError("dpkg 状态异常，更新已停止")
+        if run(["dpkg", "--audit"]):
+            raise RuntimeError("dpkg reported an inconsistent state; upgrade stopped")
         subprocess.run(["apt-get", "update"], check=True)
         subprocess.run(["apt-get", "-s", "--no-remove", "upgrade"], check=True)
         return subprocess.call(
@@ -213,9 +170,30 @@ def execute(argv):
             env=os.environ | {"DEBIAN_FRONTEND": "noninteractive"},
         )
     if cmd == "reboot":
-        print("正在重启，SSH 连接将中断。", flush=True)
+        output.notice("rebooting")
         return subprocess.call(["systemctl", "reboot"])
     return 0
+
+
+def shell(config_path):
+    while True:
+        try:
+            line = input("vps-ops> ")
+        except EOFError:
+            return 0
+        except KeyboardInterrupt:
+            output.write_line("")
+            continue
+        if line.strip() in ("exit", "quit"):
+            return 0
+        if line.strip() == "help":
+            line = "--help"
+        if not line.strip():
+            continue
+        try:
+            execute(["--config", config_path, *shlex.split(line)])
+        except (SystemExit, KeyboardInterrupt):
+            pass
 
 
 def main():
@@ -223,9 +201,3 @@ def main():
         raise SystemExit(execute(sys.argv[1:]))
     except KeyboardInterrupt:
         raise SystemExit(130) from None
-    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as e:
-        print(
-            str(e) if isinstance(e, RuntimeError) else type(e).__name__ + ": 操作失败",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from None

@@ -1,32 +1,11 @@
 """Collect the requested parts of the server status."""
 
-import argparse
 import subprocess
 from pathlib import Path
 
 from .runtime import run
 
-SECTIONS = {
-    "system": "系统和启动信息",
-    "resources": "内存和磁盘",
-    "services": "服务状态",
-    "network": "TCP 监听、路由和网络空间",
-    "firewall": "防火墙规则",
-    "updates": "软件更新和重启提示",
-    "errors": "最近 24 小时的系统错误数量",
-}
-
-
-def arguments(args):
-    parser = argparse.ArgumentParser(prog="vps-ops status", description="查看服务器状态")
-    parser.add_argument("--all", action="store_true", help="显示全部状态")
-    for name, description in SECTIONS.items():
-        parser.add_argument(
-            "--" + name, dest="sections", action="append_const", const=name, help=description
-        )
-    parser.add_argument("--service", action="append", metavar="名称", help="只查看指定服务，可重复")
-    parser.add_argument("--json", action="store_true", help="以 JSON 输出")
-    return parser.parse_args(args)
+SECTIONS = ("system", "resources", "services", "network", "firewall", "updates", "errors")
 
 
 def select_services(names, configured_services):
@@ -39,12 +18,12 @@ def select_services(names, configured_services):
         elif name + ".service" in configured_services:
             selected.append(name + ".service")
         else:
-            raise ValueError(f"未配置服务：{name}")
+            raise ValueError(f"Service is not configured: {name}")
     return list(dict.fromkeys(selected))
 
 
 def collect(configured_services, selected_sections=(), *, summary=False, selected_services=()):
-    """Retain the status JSON fields while avoiding unrelated system queries."""
+    """Collect machine-readable status fields without querying unrelated sections."""
     sections = set(selected_sections)
     data = {}
 
@@ -52,28 +31,28 @@ def collect(configured_services, selected_sections=(), *, summary=False, selecte
         try:
             data[key] = run(args)
         except (RuntimeError, OSError, subprocess.SubprocessError):
-            data[key] = "读取失败"
+            data[key] = "Query failed"
 
     if summary or "system" in sections:
-        query("系统", ["uname", "-sr"])
-        query("运行", ["uptime"])
+        query("system", ["uname", "-sr"])
+        query("uptime", ["uptime"])
     if summary or "resources" in sections:
-        query("内存", ["free", "-h"])
-        query("磁盘", ["df", "-hT", "/"] if summary else ["df", "-hT"])
+        query("memory", ["free", "-h"])
+        query("disks", ["df", "-hT", "/"] if summary else ["df", "-hT"])
     if "network" in sections:
-        query("监听", ["ss", "-lnt"])
-        query("路由", ["ip", "route"])
+        query("listeners", ["ss", "-lnt"])
+        query("routes", ["ip", "route"])
     if "firewall" in sections:
-        query("防火墙", ["ufw", "status"])
+        query("firewall", ["ufw", "status"])
     if (summary or "services" in sections) and (not selected_services or sections == set(SECTIONS)):
-        query("失败服务", ["systemctl", "--failed", "--no-pager"])
+        query("failed_services", ["systemctl", "--failed", "--no-pager"])
     if "updates" in sections:
-        query("更新", ["apt", "list", "--upgradable"])
+        query("updates", ["apt", "list", "--upgradable"])
     if summary or "services" in sections:
-        data["服务"] = {}
+        data["services"] = {}
         for service in selected_services or configured_services:
             try:
-                data["服务"][service] = run(
+                data["services"][service] = run(
                     [
                         "systemctl",
                         "show",
@@ -87,15 +66,15 @@ def collect(configured_services, selected_sections=(), *, summary=False, selecte
                     ]
                 )
             except (RuntimeError, OSError, subprocess.SubprocessError):
-                data["服务"][service] = "读取失败"
+                data["services"][service] = "Query failed"
     if "system" in sections:
         try:
-            data["启动标识"] = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+            data["boot_id"] = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
         except OSError:
-            data["启动标识"] = "读取失败"
+            data["boot_id"] = "Query failed"
     if "errors" in sections:
         try:
-            data["最近24小时错误数"] = len(
+            data["error_count_24h"] = len(
                 run(
                     [
                         "journalctl",
@@ -110,9 +89,9 @@ def collect(configured_services, selected_sections=(), *, summary=False, selecte
                 ).splitlines()
             )
         except (RuntimeError, OSError, subprocess.SubprocessError):
-            data["最近24小时错误数"] = "读取失败"
+            data["error_count_24h"] = "Query failed"
     if "network" in sections:
-        query("网络空间", ["ip", "netns", "list"])
+        query("namespaces", ["ip", "netns", "list"])
     if summary or "system" in sections or "updates" in sections:
-        data["需要重启"] = Path("/var/run/reboot-required").exists()
+        data["reboot_required"] = Path("/var/run/reboot-required").exists()
     return data

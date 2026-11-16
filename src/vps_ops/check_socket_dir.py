@@ -4,10 +4,9 @@
 import os
 import pathlib
 import stat
-import sys
 
 
-def main():
+def check():
     try:
         p = pathlib.Path("/var/lib/mihomo/controller")
         if p.is_symlink():
@@ -19,13 +18,8 @@ def main():
             or stat.S_IMODE(s.st_mode) != 0o700
         ):
             raise ValueError()
-    except Exception:
-        print(
-            "Private controller directory missing or unsafe; refusing mihomo startup.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(
+            "Private controller directory is missing or unsafe; refusing startup"
+        ) from exc
+    return {"directory": str(p), "state": "pass"}

@@ -1,6 +1,6 @@
-# 服务端订阅地址；将域名改为自己的订阅域名。
+# Subscription endpoint; replace the domain with your own.
 base-url: https://subscription.example.com:9443
-node-group: 节点
+node-group: Nodes
 variables:
   server_ipv4: 203.0.113.1
   ssh_port: 23899
@@ -42,41 +42,41 @@ defaults:
 proxy-groups:
   - name: GLOBAL
     type: select
-    proxies: [节点, DIRECT]
-  - { name: GitHub, type: select, proxies: [节点, DIRECT] }
-  - { name: YouTube, type: select, proxies: [节点, DIRECT] }
-  - { name: Google, type: select, proxies: [节点, DIRECT] }
-  - { name: Telegram, type: select, proxies: [节点, DIRECT] }
-  - { name: Netflix, type: select, proxies: [节点, DIRECT] }
-  - { name: Disney, type: select, proxies: [节点, DIRECT] }
-  - { name: Spotify, type: select, proxies: [节点, DIRECT] }
-  - { name: Bilibili, type: select, proxies: [DIRECT, 节点] }
-  - { name: China, type: select, proxies: [DIRECT, 节点] }
-  - { name: Private, type: select, proxies: [节点, DIRECT] }
-  - { name: OpenAI, type: select, proxies: [节点, DIRECT] }
-  - name: Anthropic-直连（仅 TCP）
+    proxies: [Nodes, DIRECT]
+  - { name: GitHub, type: select, proxies: [Nodes, DIRECT] }
+  - { name: YouTube, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Google, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Telegram, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Netflix, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Disney, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Spotify, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Bilibili, type: select, proxies: [DIRECT, Nodes] }
+  - { name: China, type: select, proxies: [DIRECT, Nodes] }
+  - { name: Private, type: select, proxies: [Nodes, DIRECT] }
+  - { name: OpenAI, type: select, proxies: [Nodes, DIRECT] }
+  - name: Anthropic-Direct (TCP only)
     type: select
     proxies: [DIRECT]
     disable-udp: true
     hidden: true
   - name: Anthropic
     type: select
-    proxies: [REJECT, 节点, Anthropic-直连（仅 TCP）]
+    proxies: [REJECT, Nodes, Anthropic-Direct (TCP only)]
     default-selected: REJECT
-  - { name: Google AI, type: select, proxies: [节点, DIRECT] }
-  - { name: Grok, type: select, proxies: [节点, DIRECT] }
-  - { name: AI-Coding, type: select, proxies: [节点, DIRECT] }
-  - { name: AI-Other, type: select, proxies: [节点, DIRECT] }
-  - { name: Steam, type: select, proxies: [节点, DIRECT] }
-  - { name: 游戏, type: select, proxies: [节点, DIRECT] }
-  - { name: 游戏下载, type: select, proxies: [节点, DIRECT] }
-  - { name: 开发, type: select, proxies: [节点, DIRECT] }
-  - { name: Apple, type: select, proxies: [节点, DIRECT] }
-  - { name: Microsoft, type: select, proxies: [节点, DIRECT] }
-  - { name: Linux, type: select, proxies: [节点, DIRECT] }
+  - { name: Google AI, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Grok, type: select, proxies: [Nodes, DIRECT] }
+  - { name: AI-Coding, type: select, proxies: [Nodes, DIRECT] }
+  - { name: AI-Other, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Steam, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Gaming, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Game Downloads, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Development, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Apple, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Microsoft, type: select, proxies: [Nodes, DIRECT] }
+  - { name: Linux, type: select, proxies: [Nodes, DIRECT] }
 
 rule-providers:
-  # 少量本地规则可在这里维护；其余内容由上游规则集更新。
+  # Maintain small local rules here; upstream providers update the rest.
   openai-custom:
     type: inline
     behavior: domain
@@ -283,7 +283,7 @@ rules:
   - "AND,((NETWORK,TCP),(RULE-SET,openai-custom)),OpenAI"
   - "RULE-SET,ads,REJECT"
   - "RULE-SET,anthropic,Anthropic"
-  - "NETWORK,udp,节点"
+  - "NETWORK,udp,Nodes"
   - "NETWORK,udp,REJECT"
   - "RULE-SET,openai,OpenAI"
   - "RULE-SET,google-ai,Google AI"
@@ -300,13 +300,13 @@ rules:
   - "RULE-SET,disney,Disney"
   - "RULE-SET,spotify,Spotify"
   - "RULE-SET,bilibili,Bilibili"
-  - "RULE-SET,game-download,游戏下载"
-  - "RULE-SET,steam-cn,游戏下载"
+  - "RULE-SET,game-download,Game Downloads"
+  - "RULE-SET,steam-cn,Game Downloads"
   - "RULE-SET,steam,Steam"
-  - "RULE-SET,epicgames,游戏"
-  - "RULE-SET,blizzard,游戏"
-  - "RULE-SET,docker,开发"
-  - "RULE-SET,developer,开发"
+  - "RULE-SET,epicgames,Gaming"
+  - "RULE-SET,blizzard,Gaming"
+  - "RULE-SET,docker,Development"
+  - "RULE-SET,developer,Development"
   - "RULE-SET,apple-cn,DIRECT"
   - "RULE-SET,microsoft-cn,DIRECT"
   - "RULE-SET,apple,Apple"
@@ -316,8 +316,8 @@ rules:
   - "RULE-SET,linux-archlinux,Linux"
   - "RULE-SET,linux-fedora,Linux"
   - "RULE-SET,private,Private"
-  - "RULE-SET,loyal-proxy,节点"
+  - "RULE-SET,loyal-proxy,Nodes"
   - "RULE-SET,loyal-direct,China"
   - "RULE-SET,cn,China"
   - "RULE-SET,geoip-cn,China,no-resolve"
-  - "MATCH,节点"
+  - "MATCH,Nodes"

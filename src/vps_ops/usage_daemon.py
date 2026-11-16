@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Private Unix-socket observed-usage sampler. No traffic logs or external network."""
 
-import argparse
 import datetime
-import fcntl
 import json
+import logging
 import os
 import pathlib
 import signal
 import sqlite3
 import stat
-import sys
 import threading
 import time
 
@@ -119,7 +117,7 @@ def loop(db, c, stop):
             raise ValueError("storage cap")
         ok = sample(db, c, stamp())
         if ok != healthy:
-            print(
+            logging.getLogger(__name__).warning(
                 "sampling resumed; approximate observed bytes only"
                 if ok
                 else "sampling gap/error; no raw response logged"
@@ -173,51 +171,42 @@ def report(db, c):
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    action = parser.add_mutually_exclusive_group(required=True)
-    action.add_argument("--serve", action="store_true")
-    action.add_argument("--report", action="store_true")
-    parser.add_argument(
-        "--config", type=pathlib.Path, default=pathlib.Path("/etc/mihomo-observed/collector.json")
-    )
-    a = parser.parse_args()
-    db = None
+def load_config(path):
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise ValueError("configuration permissions")
+    return validate_config(json.loads(path.read_text()))
+
+
+def read_report(path):
+    config = load_config(path)
+    database = pathlib.Path(config["db"])
+    info = database.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077:
+        raise ValueError("database permissions")
+    db = sqlite3.connect("file:" + str(database) + "?mode=ro", uri=True)
     try:
-        info = a.config.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
-            raise ValueError("configuration permissions")
-        c = validate_config(json.loads(a.config.read_text()))
-        if a.report:
-            path = pathlib.Path(c["db"])
-            info = path.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077:
-                raise ValueError("database permissions")
-            db = sqlite3.connect("file:" + str(path) + "?mode=ro", uri=True)
-            print(json.dumps(report(db, c), ensure_ascii=False))
-            return
-        check_socket(c["socket"], check_file=False)
-        lockpath = pathlib.Path(c["db"]).parent / "collector.lock"
-        fd = os.open(lockpath, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, "w") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            db = private_db(pathlib.Path(c["db"]))
+        return report(db, config)
+    finally:
+        db.close()
+
+
+def serve(path):
+    import fcntl
+
+    c = load_config(path)
+    check_socket(c["socket"], check_file=False)
+    lockpath = pathlib.Path(c["db"]).parent / "collector.lock"
+    fd = os.open(lockpath, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        db = private_db(pathlib.Path(c["db"]))
+        try:
             pagesize = db.execute("PRAGMA page_size").fetchone()[0]
             db.execute("PRAGMA max_page_count=" + str(MAX_DATABASE // pagesize))
             stop = threading.Event()
             for sig in (signal.SIGTERM, signal.SIGINT):
                 signal.signal(sig, lambda *args: stop.set())
             loop(db, c, stop)
-    except Exception:
-        print(
-            "collector stopped: configuration, storage or local-source error; no raw data printed",
-            file=sys.stderr,
-        )
-        sys.exit(78)
-    finally:
-        if db is not None:
+        finally:
             db.close()
-
-
-if __name__ == "__main__":
-    main()

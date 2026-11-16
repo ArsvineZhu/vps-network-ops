@@ -4,19 +4,21 @@
 
 ## 自动设备识别与网络接管
 
-一名拥有两种设备身份的订阅持有者只需要一个随机 HTTPS 订阅地址。更新时 Caddy 根据请求的 `User-Agent` 在已生成的 `WIN`、`Apple` 配置中选择；**服务端认证身份和出口路由由选中的配置决定**，不是靠客户端自定义标签。
+统一订阅始终包含 Windows 和 Apple 两套身份，每套都有 VLESS、Hysteria2、AnyTLS，共六个可选节点。更新时，设备识别只调整 `Nodes` 组的默认选中项；用户可随时手动切换身份和协议，TCP 出口随实际选中节点的认证身份变化。
 
-- Apple：检测到 `Darwin`、`iPhone`、`iPad`、`Macintosh`、`Mac OS X` 或 `CFNetwork`，返回 Apple 认证信息及其 tc/eBPF TCP 出口。
-- WIN：检测到 `Windows`、`Win64` 或 `clash-verge/`，返回 WIN 认证信息及其 NFQUEUE TCP 出口。
-- 既未匹配也无法可靠判断时，返回 HTTP 406，不默默使用错误身份。设备专用旧订阅 URL 仍按原身份提供静态文件，不受此判断影响。
+- 检测到 `Darwin`、`iPhone`、`iPad`、`Macintosh`、`Mac OS X` 或 `CFNetwork`：默认选择 `Apple · VLESS`。即使 UA 同时包含 `clash-verge/` 或 Windows 标识，也按 Apple 处理。
+- 未出现 Apple 标识，且检测到 `Windows`、`Win64` 或 `clash-verge/`：默认选择 `Windows · VLESS`。
+- 未识别设备：仍返回全部节点，初始默认选择 `Windows · VLESS`，可手动修改。不会拒绝订阅更新。
 
-Clash for Apple 默认的下载身份可能包含 `Darwin/...` 和硬件型号；Clash Verge Rev 默认只报告 `clash-verge/v...`，**并不能凭这个 UA 单独证明运行在 Windows**。在当前仅使用 WIN 上的 Clash Verge Rev 的设备组合中可将其用于默认分发；若以后在 Mac 上使用 Clash Verge Rev，需要配置能够报告平台的下载请求头，或扩展判断方式。User-Agent 可以被修改，不能作为身份认证或安全边界；持有统一订阅 URL 就相当于有权获得两套设备凭据。一个普通新成员仍需要先注册对应的服务器身份，不能凭一个尚未注册的 UUID 自动产生两个 TCP 指纹出口。
+Clash Verge Rev 的通用 UA `clash-verge/v...` 用作当前 Windows 客户端的默认提示；若在 macOS 上使用相同 UA，可设置带 `Darwin` 的订阅下载 UA，或手动选择 Apple 节点。User-Agent 只影响默认项；订阅令牌授权读取两套身份的凭据。不同订阅持有者应使用独立令牌和独立认证身份。离线 `member create` 仍只生成待注册的单身份材料，注册、发布及双身份分配由服务器管理者完成。
 
-统一 URL 只暴露随机令牌，实际文件后缀 `.WIN.yaml` / `.Apple.yaml` 不在 Caddy 可直接请求的 URL 匹配范围内。响应设置 `Cache-Control: no-store` 与 `Vary: User-Agent`，避免共享缓存把一台设备的配置发给另一台设备。
+统一 URL 使用 `/s/auto/<令牌>.yaml`。设备变体 `.Windows.yaml`、`.Apple.yaml` 只在服务器内部使用。响应设置 `Cache-Control: no-store` 与 `Vary: User-Agent`。原有设备专用链接继续提供单身份配置。
 
-主选择组名为 `节点`，其默认项为当前设备的 VLESS；`GLOBAL` 组把 `节点` 放在第一项。客户端保留原有手动切换协议的选择状态，因此旧客户端若记录了其他组选择，首次导入统一订阅后应核对实际选中节点。
+`GLOBAL` 组把 `Nodes` 放在第一项。客户端可能保留上次手动选择；更新订阅后应核对 `Nodes` 的实际选中项，生成配置中的默认值不强制覆盖客户端保存的选择。
 
-客户端 DNS 默认采用 Fake IP，并通过 `节点` 访问 Cloudflare DoH；代理入口使用固定 IPv4，不需要先从本地解析代理域名。WIN 订阅启用 TUN 自动路由、严格路由和端口 53 DNS 劫持；Apple 订阅启用 TUN 标志，实际 VPN 接管由其 Network Extension 管理。第三方应用独立使用的 DoH/DoT 流量需要单独观察连接日志，端口 53 的 DNS 劫持不会自动解密这些连接。
+客户端 DNS 使用 Fake IP，并通过 `Nodes` 访问 Cloudflare DoH；代理入口采用固定 IPv4。识别为 Windows 时使用 `mixed` TUN 栈、自动路由、严格路由和端口 53 DNS 劫持。Apple 和未识别设备使用通用 TUN 配置，Apple 上的 VPN 接管由客户端 Network Extension 管理。TUN 字段是否生效还取决于客户端是否启用 VPN/TUN，以及客户端的覆写设置。
+
+`check dns` 检查 VPS 网络空间的解析。客户端 DNS 泄露需在设备启用 VPN/TUN 后复测，同时观察端口 53、IPv6 和应用自带 DoH/DoT 的流量路径。UDP 经选中的代理协议进入 VPS 后按服务端规则直接出站；HTTP/3 是否可用需另外确认客户端 UDP 接管与目标 QUIC 握手。
 
 ## 调整规则
 
