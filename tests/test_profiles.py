@@ -35,9 +35,9 @@ def test_target_controls_identity_and_client_tun():
         "public_key": "A" * 43,
         "short_id": "aabb",
     }
-    win = clash_profile.generate(node, target="win")
+    win = clash_profile.generate(node, target="WIN")
     apple = clash_profile.generate(node, target="Apple")
-    assert win["proxies"][0]["name"] == "win · VLESS"
+    assert win["proxies"][0]["name"] == "WIN · VLESS"
     assert apple["proxies"][0]["name"] == "Apple · VLESS"
     assert apple["proxies"][0]["client-fingerprint"] == "ios"
     assert win["tun"]["strict-route"] is True
@@ -80,8 +80,6 @@ def test_member_generation_uses_a_distinct_identity(tmp_path):
                 source,
                 name,
                 output,
-                "--target",
-                "win",
                 "--policy",
                 policy,
             ],
