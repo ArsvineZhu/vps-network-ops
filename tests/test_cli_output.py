@@ -177,15 +177,15 @@ def test_checks_and_subscription_addresses_are_formatted(monkeypatch, tmp_path, 
 
     subscription_file = tmp_path / "subscriptions.json"
     subscriptions = {
-        "windows": "https://example.invalid/s/private.yaml",
-        "ios": "https://example.invalid/s/other.yaml",
+        "win": "https://example.invalid/s/private.yaml",
+        "Apple": "https://example.invalid/s/other.yaml",
     }
     subscription_file.write_text(json.dumps(subscriptions))
     monkeypatch.setattr(client, "Path", lambda _: subscription_file)
     assert cli.execute(["deploy", "show", "subscriptions"]) == 0
     output = capsys.readouterr().out
-    assert "windows：https://example.invalid/s/private.yaml\n" in output
-    assert "ios：https://example.invalid/s/other.yaml\n" in output
+    assert "win：https://example.invalid/s/private.yaml\n" in output
+    assert "Apple：https://example.invalid/s/other.yaml\n" in output
     assert '{"' not in output
     assert cli.execute(["--json", "deploy", "show", "subscriptions"]) == 0
     assert json.loads(capsys.readouterr().out) == subscriptions
