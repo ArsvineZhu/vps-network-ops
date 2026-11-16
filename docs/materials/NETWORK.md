@@ -19,3 +19,20 @@ TCP 选项中的 MSS、窗口缩放和时间戳参与两端协商。修改选项
 Linux 可以把 TCP 校验和计算交给网卡或虚拟链路。抓包中的 `CHECKSUM_PARTIAL` 可能仍是伪首部种子；关闭相关卸载或在独立接收端抓包后再检查完整校验和。GSO、TSO 和 GRO 会影响分段观察，详见 [Linux 校验和卸载](https://docs.kernel.org/networking/checksum-offloads.html)和[分段卸载](https://docs.kernel.org/networking/segmentation-offloads.html)。
 
 Mihomo 后端使用自身 DNS 配置。直接在网络空间中运行系统工具时，工具还依赖该空间可访问的系统解析器；排查时可通过 `curl --resolve` 指定已解析的地址，并保留 HTTPS 主机名和证书校验。
+
+## TTL 与往返时延的一致性
+
+VPS 当前在网络空间中独立建立目标 TCP 连接。iOS 出口的 `ip_default_ttl=65`、Windows 出口的 `129` 是为了补偿一次内部转发。远端看到 `TTL 54/64` 时，p0f 估算的 10 跳是出口到远端的路径，并不包括设备到 VPS 的原始路径。10 跳属于正常公网范围；调高初始 TTL 可以让特定检测站的估计值变小，但不会缩短真实路径。跨目标站点与路由变化后还可能出现反常的初始 TTL 估算。
+
+TCP 代理分别终止设备端和服务器端连接。服务器读取 `TCP_INFO.tcpi_rtt` 得到的是 VPS 后端与远端之间的平滑 RTT；浏览器测得的请求时间还包含设备到 VPS 的路径、代理调度和应用处理。Linux 服务器被动建立 TCP 时，会从 SYN-ACK 到第三次 ACK 的时间建立初始 RTT 样本，之后随着新数据确认继续更新。修改 SYN 选项、TTL、MSS 或 TCP 时间戳的值，都不会直接消除这两个观测范围的差别。
+
+以 `tc netem` 延迟 ACK/握手可以在隔离实验中影响 TCP RTT 估计，但也会影响真实发送窗口、拥塞控制和请求完成时间。普通追加网络延迟会同时加大服务器与浏览器所测时延，不能稳定消除差值，不应直接部署到用户出站。客户端开启 Mihomo TUN 仅改变流量捕获，不会使 VLESS/AnyTLS 的 TCP 重新建连变成端到端 TCP。
+
+### 建议对照实验
+
+1. 在同一客户端、网络和网站上分别测试 VLESS、Hysteria2、AnyTLS，记录多次浏览器时间、网站 TCP RTT、HTTP 版本及服务器端连接状态，避免单次测量偏差。
+2. 在 VPS 网络空间使用 `ss -ti` 观察实际出站连接 RTT，结合远端抓包验证 SYN 选项/TTL；比较不同协议的分布，而非只看平均值。
+3. 使用同一 VPS 的 Tailscale Exit Node 单独对照（关闭 Clash VPN），验证三层转发是否消除 TCP 连接的分段建连特征。它不增加代理跳数，但会改变整个运行形态和端到端拥塞控制。
+4. TTL 调整或 ACK 延迟只在可撤销的隔离网络空间测试，不混入已验证的生产 TCP 指纹路径。
+
+依据：[p0f 指纹格式](https://github.com/p0f/p0f/blob/master/docs/README)、[Linux TCP RTT 样本更新](https://github.com/torvalds/linux/blob/master/net/ipv4/tcp_input.c)、[TCP_INFO](https://github.com/torvalds/linux/blob/master/net/ipv4/tcp.c)、[RFC 6298](https://www.rfc-editor.org/rfc/rfc6298)、[tc-netem](https://man7.org/linux/man-pages/man8/tc-netem.8.html)。
