@@ -236,10 +236,10 @@ vps-ops profile generate /private/node.json /private/provider.yaml --kind provid
 模板沿用节点描述，去掉 uuid、name，只保留 server、port、servername、public_key、short_id 和可选 fingerprint：
 
 ```sh
-vps-ops member create /private/server.json tablet /private/tablet --policy /private/rules.yaml
+vps-ops member create /private/server.json tablet /private/tablet --target win --policy /private/rules.yaml
 ```
 
-标签为 1 至 40 位字母、数字、下划线或连字符。输出目录必须不存在，父目录已存在。生成：
+标签为 1 至 40 位字母、数字、下划线或连字符。`--target win|Apple` 只设置新成员客户端的标识和网络参数，不会自动把新 UUID 注册到对应的服务端路由。输出目录必须不存在，父目录已存在。生成：
 
 | 文件                     | 用途                             |
 | ------------------------ | -------------------------------- |
