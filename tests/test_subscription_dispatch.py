@@ -12,7 +12,7 @@ CADDYFILE = Path(__file__).parents[1] / "system/caddy/Caddyfile.example"
 def matcher(name):
     text = CADDYFILE.read_text(encoding="utf-8")
     pattern = re.search(
-        rf'^\\s*@{name} header_regexp User-Agent "([^"]+)"$',
+        rf'^\s*@{name} header_regexp User-Agent "([^"]+)"$',
         text,
         re.MULTILINE,
     )
@@ -40,7 +40,7 @@ def test_subscription_platform_selection(user_agent, target):
 
 def test_only_tokenized_auto_url_is_public():
     text = CADDYFILE.read_text(encoding="utf-8")
-    pattern = re.search(r"path_regexp auto_subscription (\\S+)", text)
+    pattern = re.search(r"path_regexp auto_subscription (\S+)", text)
     assert pattern is not None
     route = re.compile(pattern.group(1))
     token = "A" * 43
