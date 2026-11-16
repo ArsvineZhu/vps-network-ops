@@ -1,4 +1,4 @@
-// Package syn reshapes IPv4 TCP SYN options without modifying negotiated values.
+// Package syn normalizes IPv4 TCP SYN offers for outbound profiles.
 package syn
 
 import (
@@ -122,12 +122,17 @@ func rewrite(pkt []byte, p Profile) ([]byte, bool, string, error) {
 	if seen&p.Required != p.Required {
 		return pass("missing_required_option")
 	}
-	if seen != p.Required {
+	allowed := p.Required
+	if p.Name == "windows" {
+		allowed |= optionTS
+	}
+	if seen & ^allowed != 0 {
 		return pass("unsupported_option_set")
 	}
 
 	// Output option bytes are assembled from the original options; no value is
-	// manufactured or altered. iOS uses four additional padding bytes.
+	// manufactured or altered. Windows declines timestamps before negotiation;
+	// iOS retains the original timestamp offer and adds padding.
 	var layout []byte
 	layout = append(layout, options[2]...)
 	layout = append(layout, 1)

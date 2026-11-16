@@ -3,9 +3,10 @@ import json
 import pytest
 import yaml
 
+from vps_ops.capabilities import Capabilities
 from vps_ops.checks import checks
-from vps_ops.deploy.config import load, services
-from vps_ops.deploy.render import save
+from vps_ops.deploy.config import load
+from vps_ops.files import save
 
 
 def test_tailscale_needs_no_domain_or_dns_credentials(tmp_path):
@@ -23,9 +24,9 @@ def test_tailscale_needs_no_domain_or_dns_credentials(tmp_path):
 
 def test_deployment_mode_must_enable_a_capability():
     with pytest.raises(ValueError):
-        services("none")
-    assert "tailscaled" not in services("mihomo")
-    assert "mihomo" in services("both")
+        Capabilities.from_config({"mode": "none"})
+    assert "tailscaled" not in Capabilities.from_config({"mode": "mihomo"}).services
+    assert "mihomo" in Capabilities.from_config({"mode": "both"}).services
 
 
 def test_identity_write_is_atomic_and_repeatable(tmp_path):
@@ -109,7 +110,7 @@ def test_diagnostics_redact_subscription_paths_and_known_credentials(monkeypatch
     config = tmp_path / "frontend.yaml"
     config.write_text("password: sample-credential\n")
     token = "x" * 43
-    record = f"caddy request /s/auto/{token}.yaml password=sample-credential status=200\n"
+    record = f"caddy request /s/{token}.yaml password=sample-credential status=200\n"
     process = SimpleNamespace(stdout=io.StringIO(record), wait=lambda: 0, poll=lambda: 0)
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: process)
     lines = []
@@ -121,3 +122,128 @@ def test_diagnostics_redact_subscription_paths_and_known_credentials(monkeypatch
     assert token not in output
     assert "sample-credential" not in output
     assert "status=200" in output
+
+
+def test_windows_build_transfers_linux_shell_scripts(tmp_path):
+    import shutil
+    import tarfile
+    import zipfile
+
+    from vps_ops.deploy.client import bundle
+
+    payload = bundle({"plan": {"mihomo": False}}, lambda _: "unused", tmp_path / "install.tar.gz")
+    with tarfile.open(payload) as archive:
+        for name in ("bootstrap.sh", "base.yaml", "apply.yaml", "preflight.py"):
+            script = archive.extractfile(name)
+            assert script is not None
+            assert b"\r" not in script.read(), name
+        wheel = next(member for member in archive.getmembers() if member.name.endswith(".whl"))
+        package = archive.extractfile(wheel)
+        assert package is not None
+        target = tmp_path / wheel.name
+        with target.open("wb") as output:
+            shutil.copyfileobj(package, output)
+    with zipfile.ZipFile(target) as archive:
+        resources = [name for name in archive.namelist() if name.startswith("vps_ops/")]
+        assert resources
+        for name in resources:
+            assert b"\r" not in archive.read(name), name
+
+
+def test_configure_wizard_preserves_private_settings_and_rejects_invalid_replacement(
+    tmp_path, monkeypatch, capsys
+):
+    from vps_ops.cli import execute
+    from vps_ops.deploy import client
+
+    public = tmp_path / "management.pub"
+    public.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKtest management")
+    path = tmp_path / "node.yaml"
+    previous = {
+        "mode": "mihomo",
+        "features": {"fingerprint": True, "rtt": True},
+        "target": "root@host",
+        "public_key": str(public),
+        "identity": "private-key-reference",
+        "domain": "node.example.com",
+        "public_ipv4": "192.0.2.5",
+        "email": "a@example.com",
+        "dns_provider": "cloudflare",
+        "credential_file": "private-dns.json",
+        "custom": {"keep": "private-node-setting"},
+        "device": {"name": "Primary", "platform": "Windows"},
+    }
+    path.write_text(yaml.safe_dump(previous))
+    answers = iter(("", "no", "no", ""))
+    labels = []
+
+    def answer(label):
+        labels.append(label)
+        return next(answers)
+
+    monkeypatch.setattr("builtins.input", answer)
+    assert execute(["deploy", "configure", str(path)]) == 0
+    expected = previous | {"features": {"fingerprint": False, "rtt": False}}
+    assert yaml.safe_load(path.read_text()) == expected
+    assert len(labels) == 4
+    output = capsys.readouterr().out
+    assert "Clash (Mihomo)" in output and "private-dns.json" not in output
+    content = path.read_bytes()
+    with pytest.raises(ValueError, match="SSH port"):
+        client.init(path, expected | {"port": 70000}, replace=True)
+    assert path.read_bytes() == content
+
+
+def test_fresh_wizard_defaults_to_clash_fingerprint_and_wireguard(tmp_path, monkeypatch):
+    from vps_ops.cli import execute
+
+    public = tmp_path / "management.pub"
+    public.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKtest management")
+    answers = iter(
+        (
+            "",
+            "",
+            "",
+            "",
+            "root@host",
+            "",
+            str(public),
+            "",
+            "node.example.com",
+            "192.0.2.5",
+            "a@example.com",
+            "",
+            "",
+            "",
+            "",
+        )
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    path = tmp_path / "node.yaml"
+    assert execute(["deploy", "init", str(path)]) == 0
+    selected = load(path)
+    assert selected["mode"] == "mihomo"
+    assert selected["features"] == {"fingerprint": True, "rtt": True}
+    assert "wg-quick@vps-ops" in selected["services"]
+    assert "tailscaled" not in selected["services"]
+
+
+@pytest.mark.parametrize("mode", ("tailscale", "both"))
+def test_saved_wizard_keeps_explicit_tailscale_choices(mode, monkeypatch):
+    from vps_ops.prompts import deployment
+
+    saved = {
+        "mode": mode,
+        "features": {"fingerprint": False, "rtt": False},
+        "target": "saved-host",
+        "public_key": "saved.pub",
+        "identity": "saved-key",
+        "domain": "node.example.com",
+        "public_ipv4": "192.0.2.5",
+        "email": "a@example.com",
+        "dns_provider": "dnspod",
+        "credential_file": "private.json",
+        "device": {"name": "Primary", "platform": "Windows"},
+    }
+    monkeypatch.setattr("builtins.input", lambda _: "")
+    assert deployment(saved) == saved

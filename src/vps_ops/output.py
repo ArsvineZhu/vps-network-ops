@@ -215,7 +215,7 @@ def _status_text(data, summary):
 
     network = []
     if "listeners" in data:
-        network.append("TCP listeners:")
+        network.append("TCP / UDP listeners:")
         network.extend("  " + line for line in _listeners(data["listeners"]))
     for key in ("routes", "namespaces"):
         if key in data:
@@ -279,7 +279,8 @@ def _usage_text(data):
     if not users:
         lines.append("  Users: None")
     for user in users:
-        lines.append(f"\n  {user.get('user', 'Unknown user')}")
+        label = user.get("label", user.get("user", "Unknown user"))
+        lines.append("\n  " + label + (" (revoked)" if user.get("active") is False else ""))
         lines.append(f"    Upload: {_bytes(user.get('upload_bytes'))}")
         lines.append(f"    Download: {_bytes(user.get('download_bytes'))}")
         active = user.get("active_connections")
@@ -341,23 +342,100 @@ def render(data, *, view="checks", summary=False):
     if view == "usage":
         return _usage_text(data)
     if view == "subscriptions":
-        return "Subscription URLs\n" + "\n".join(f"  {name}: {url}" for name, url in data.items())
+        return "Device subscription URLs\n" + "\n".join(
+            f"  {entry['name']} ({identifier}): {entry['url']}"
+            for identifier, entry in data.items()
+        )
+    if view == "devices":
+        return "Devices\n" + "\n".join(
+            f"  {entry['name']} | {entry['id']} | {entry['platform']} | {'active' if entry['active'] else 'revoked'}"
+            for entry in data
+        )
+    if view == "device-sync":
+        return f"Saved device configuration applied; {data['active']} active devices."
+    if view == "device":
+        text = f"{data['name']} | {data['id']} | {data['platform']} | {'active' if data['active'] else 'revoked'}"
+        if "url" in data:
+            text += "\nSubscription: " + data["url"]
+        elif data["active"]:
+            text += "\nRun device show " + data["id"] + " to reveal this device's subscription."
+        return text
     if view == "checks":
         return "\n".join(
             "\n".join(_lines(f"[{item['state']}] {item['name']}", item["detail"])) for item in data
         )
+    if view == "plan":
+        parts = [
+            "Deployment plan for " + data["name"] + " (" + data["target"] + ")",
+            "Access: "
+            + {
+                "tailscale": "Tailscale",
+                "mihomo": "Clash (Mihomo)",
+                "both": "Tailscale and Clash (Mihomo)",
+            }[data["mode"]],
+            "TCP fingerprints: " + ("enabled" if data["fingerprint"] else "disabled"),
+            "System: security upgrades, time synchronization, SSH key verification and firewall",
+        ]
+        if data["mihomo"]:
+            parts.append(
+                "Clash full TCP path (RTT): "
+                + ("enabled via WireGuard" if data["rtt"] else "disabled")
+            )
+        if data["wireguard"]:
+            parts.append(
+                "Clash: WireGuard device nodes selected by default; VLESS, Hysteria2 and AnyTLS also available"
+            )
+            parts.append(
+                "VLESS, Hysteria2 and AnyTLS keep separate TCP connections; select WireGuard for the full device-to-destination TCP latency path."
+            )
+        elif data["mihomo"]:
+            parts.append(
+                "Clash: VLESS, Hysteria2 and AnyTLS; HTTPS subscription and automatic certificate renewal"
+            )
+        if data["tailscale"]:
+            parts.append(
+                "Tailscale: use the sign-in link, approve the exit node, then select it on devices"
+            )
+            parts.append(
+                "Tailscale uses native packet forwarding and includes device-to-server latency"
+            )
+        parts.append("Public ports: " + ", ".join(data["ports"]) + "; existing SSH port preserved")
+        return "\n".join(parts)
     if view == "deployment":
         parts = [render(data["checks"])]
-        if data["tailscale_exit"] is not None:
-            parts.append(
-                "Tailscale: exit-node capability approved"
-                if data["tailscale_exit"]
-                else "Tailscale: awaiting exit-node approval"
-            )
+        authorization = data["tailscale"]
+        if authorization:
+            if authorization["state"] in ("login", "approval"):
+                parts.append(
+                    "After authorization and exit-node approval, run check tailscale in this session; deployment does not need to be repeated."
+                )
         if all(item["state"] != "fail" for item in data["checks"]):
-            parts.append(
-                "Deployment complete. Use deploy show subscriptions for private URLs. The SSH session remains open."
-            )
+            if data["readiness"] == "pending":
+                parts.append(
+                    "Node configured; Tailscale "
+                    + (
+                        "is still starting"
+                        if authorization["state"] == "starting"
+                        else "authorization is pending"
+                    )
+                    + ". The SSH management session remains open."
+                )
+            else:
+                parts.append("Deployment ready. The SSH management session remains open.")
+            if data.get("subscription", True):
+                parts.append(
+                    (
+                        "Clash and WireGuard are ready."
+                        if data.get("wireguard")
+                        else "Clash is ready."
+                    )
+                    + " Run device list, then device show DEVICE to import that device's private URL into its Clash client."
+                )
+            if data.get("wireguard"):
+                parts.append(
+                    "The default WireGuard nodes preserve device-to-server latency. Switch Windows / Apple in Nodes if needed."
+                )
+            parts.append("Use status and check for service and connection results.")
         return "\n".join(parts)
     if view == "member":
         text = f"Member materials created in {data['output']} (pending registration).\nRegister server-user.pending.json on the server before publishing the subscription."
@@ -372,7 +450,10 @@ def render(data, *, view="checks", summary=False):
     elif view == "controller":
         return f"[pass] Private controller directory: {data['directory']}"
     elif view == "init":
-        text = f"Private node configuration created: {data['output']}"
+        text = f"Private node configuration saved: {data['output']}"
+        if "plan" in data:
+            text += "\n" + render(data["plan"], view="plan")
+        text += f'\nDeploy with: vps-ops deploy apply "{data["output"]}"'
     else:
         raise ValueError("Unknown output view")
     if os.name == "nt":
@@ -401,14 +482,22 @@ def write_line(line):
 
 def notice(event):
     messages = {
+        "preparing": "Preparing the private deployment bundle; SSH authentication follows.",
         "rebooting": "Rebooting; the SSH connection will close. Deployment resumes after SSH returns.",
-        "ssh_closed": "Deployment complete; the SSH management session has ended.",
+        "ssh_closed": "The SSH management session has ended; reconnect to review node status.",
     }
     print(messages[event], flush=True)
 
 
 def error(exc):
-    detail = (
-        str(exc) if isinstance(exc, RuntimeError) else type(exc).__name__ + ": operation failed"
-    )
+    if isinstance(exc, (RuntimeError, ValueError)):
+        detail = str(exc)
+    elif isinstance(exc, KeyError):
+        detail = "Required configuration field is missing: " + str(exc.args[0])
+    elif isinstance(exc, OSError):
+        detail = exc.strerror or str(exc)
+        if exc.filename:
+            detail += ": " + str(exc.filename)
+    else:
+        detail = type(exc).__name__ + ": operation failed"
     print("[fail] " + detail, file=sys.stderr)

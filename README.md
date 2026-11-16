@@ -1,8 +1,8 @@
 # VPS Network Ops
 
-个人 VPS 的网络配置、TCP 指纹组件和日常运维工具。服务使用 Mihomo 提供 VLESS、Hysteria2 和 AnyTLS；设备身份决定 TCP 出口，UDP 按规则直接出站。Caddy 提供 HTTPS 订阅，Tailscale 提供独立的管理与组网通道。
+从全新 Ubuntu 24.04 AMD64 开始部署和维护个人 VPS。向导可选择 Tailscale、Clash（Mihomo）或两者，同时独立选择 TCP 指纹与完整 TCP 链路（RTT）能力。系统更新、SSH 加固、防火墙、证书续期、每设备独立订阅和累计用量共用一个运维入口。
 
-Windows 指纹出口使用 NFQUEUE，iPhone 指纹出口使用 tc/eBPF。两者分别运行在独立网络空间内。服务配置和凭据保存在服务器，仓库只提供源码、服务定义和不含秘密的示例。
+Clash 保留 VLESS、Hysteria2、AnyTLS；开启完整 TCP 链路（RTT）时额外安装独立 WireGuard 服务，并在每个设备的订阅中默认选择 WireGuard 节点，无需 Tailscale 账户。Tailscale 提供原生三层出口和管理通道。设备身份、证书、订阅与凭据保留在服务器，仓库提供源码、服务定义和不含秘密的示例。
 
 - [代码与文件索引](INDEX.md)
 - [系统架构](docs/ARCHITECTURE.md)
@@ -15,24 +15,22 @@ Windows 指纹出口使用 NFQUEUE，iPhone 指纹出口使用 tc/eBPF。两者�
 
 ## 使用运维工具
 
-新服务器可从出厂 Ubuntu 24.04 AMD64 开始部署，选择仅 Tailscale、仅 Mihomo 或两者都装：
+新服务器可从出厂 Ubuntu 24.04 AMD64 开始部署。向导默认选择 Clash（Mihomo），同时启用指纹和完整 TCP 链路（WireGuard），无需 Tailscale 账户；也可选择仅 Tailscale 或两者都装：
 
 ```powershell
-uv sync --locked
-uv run vps-ops deploy init C:/private/node.yaml
-uv run vps-ops deploy apply C:/private/node.yaml
+uv run vps-ops deploy setup C:/private/node.yaml
 ```
 
-配置字段、DNSPod 凭据准备、首次授权和部署结果见[新节点部署](docs/DEPLOYMENT.md)。
+先安装 uv 与 OpenSSH，并准备 root SSH、公钥；Clash 另需域名和 DNS API 凭据。向导保存选择后立即部署，也可用 `deploy init`、`deploy plan`、`deploy apply` 分别保存、查看和执行。以后修改能力可再次运行同一条 `deploy setup`，或用 `deploy configure` 只保存改选；无需编辑 YAML。向导会登记第一台设备；部署后在管理会话执行 `device list`、`device show 名称或ID` 获取该设备的私有订阅。第二台设备通过 `device add` 登记，各自保留独立链接与凭据。准备细节、凭据和客户端导入见[新节点部署](docs/DEPLOYMENT.md)。
 
-本机需要 Python 3.12+、uv 和 OpenSSH。在仓库根目录运行：
+本机需要 uv 和 OpenSSH；uv 会自动准备 Python，无需预先安装。在仓库根目录运行：
 
 ```powershell
 uv sync --locked
 uv run vps-ops connect root@203.0.113.10 --port 23899
 ```
 
-将示例 IP 和端口换成自己的 SSH 目标。服务器须已安装 CLI，见[安装统一 CLI](docs/DEPLOYMENT.md)。登录后出现 `vps-ops>`，连续输入：
+将示例 IP 和端口换成自己的 SSH 目标。服务器须已安装 CLI，见[部署指南](docs/DEPLOYMENT.md)。登录后出现 `vps-ops>`，连续输入：
 
 ```text
 status

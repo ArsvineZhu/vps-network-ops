@@ -1,64 +1,102 @@
-# 部署
+# 部署新节点
 
-## 从出厂系统部署新节点
+自动部署面向全新 Ubuntu 24.04 AMD64，也支持用同一份配置更新已由本工具管理的节点。部署入口会更新系统、保留 SSH 端口、安装管理公钥、验证公钥登录、禁用密码登录、开启防火墙，并按选择安装网络服务。需要重启时会等待 SSH 恢复后继续。
 
-自动部署支持 Ubuntu 24.04 AMD64，以 root 登录，至少需要 4 GiB 可用磁盘空间。先准备初始 SSH 地址、端口和自己的管理公钥；支持首次密码登录，公钥登录验证成功后再禁用密码。保留供应商的 SSH 端口。
+## 准备
 
-本机在仓库根目录执行：
+服务器需要 root SSH 登录权限、至少 4 GiB 可用磁盘空间，以及供应商控制台访问方式。先准备服务器地址、初始 SSH 端口和自己的公钥文件；首次登录可以使用密码，后续使用公钥。安全密钥可直接通过系统 OpenSSH 使用。
+
+本机安装 [uv](https://docs.astral.sh/uv/getting-started/installation/) 和 OpenSSH，下载仓库后进入根目录。uv 会自动下载项目所需的 Python 并准备依赖，无需先安装 Python，也无需本机安装 Go、Ansible 或 clang。配置与凭据放在仓库外的私人目录；Windows 下将该目录的 ACL 限制为自己的账户。
+
+还没有 SSH 密钥时，在本机 PowerShell 或终端执行：
+
+```sh
+ssh-keygen -t ed25519
+```
+
+按回车使用默认文件位置，并为私钥设置口令。已有同名文件时选择新的文件名，保留原有密钥。在 Windows 上，新公钥通常为 `C:/Users/你的用户名/.ssh/id_ed25519.pub`，私钥为同目录的 `id_ed25519`；Linux 或 macOS 对应 `~/.ssh/id_ed25519.pub` 和 `~/.ssh/id_ed25519`。向导的公钥项填写 `.pub` 文件，私钥项填写无 `.pub` 后缀的文件。首次部署会把公钥安装到服务器；已有可用密钥可直接使用。
+
+安装 Clash 服务还需准备：
+
+- 一个由自己管理的域名，A 记录只指向这台服务器的公网 IPv4，关闭 CDN 代理，并移除该域名的 AAAA 记录。
+- 证书联系邮箱。
+- DNS 服务商的 API 凭据，权限覆盖这个域名的 TXT 记录。下文列出字段。
+
+仅安装 Tailscale 无需域名、邮箱和 DNS 凭据。
+
+## 一条命令开始
+
+在本机仓库根目录执行：
 
 ```powershell
-uv sync --locked
+uv run vps-ops deploy setup C:/private/node.yaml
+```
+
+向导默认选择 `2 Clash（Mihomo）`，同时启用指纹和完整 TCP 链路（WireGuard），无需创建 Tailscale 账户。选择 `1` 可仅安装 Tailscale，选择 `3` 可同时安装。向导依次询问接入方式、网络能力、SSH、证书与首台设备名称及默认平台，然后保存私有配置并立即部署。按提示填写即可，不需要 AI 参与或手写 YAML：
+
+| 接入方式    | 设备怎样使用                     | 安装内容                                      |
+| ----------- | -------------------------------- | --------------------------------------------- |
+| `tailscale` | 登录 Tailscale，选择这台出口节点 | Tailscale 出口与管理通道                      |
+| `mihomo`    | 在 Clash 客户端导入一个订阅地址  | Mihomo 三种协议、设备订阅、证书续期和累计用量 |
+| `both`      | 两种方式均可使用                 | 上述能力共用系统维护和防火墙                  |
+
+Mihomo 是 Clash 内核。选择 Clash 时，服务器始终保留 VLESS、Hysteria2 和 AnyTLS 三种接入协议。两项能力独立选择，所需组件由部署自动安装：
+
+| 能力                 | 选择后会发生什么                                                                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| TCP 指纹             | 为设备出口规范化 Windows 或 Apple 的 TCP 建连特征。Clash 三种代理协议使用独立出口；三层转发路径按设备支持的 TCP 选项选择适用指纹。            |
+| 完整 TCP 链路（RTT） | 每台设备的订阅增加 Windows、Apple 两个 WireGuard 节点，并默认使用对应节点，让目标网站测得设备到目标的完整 TCP 往返路径。无需 Tailscale 账户。 |
+
+Tailscale 使用原生三层转发，本身包含设备到服务器的 TCP 延迟；完整链路开关决定是否额外安装 Clash 使用的 WireGuard 节点。仅 Tailscale 时向导不再询问这一项。IPv4 出口启用指纹时，携带 TCP 时间戳的连接采用 Apple 选项布局，未携带时间戳的连接采用 Windows 布局。Windows 原生连接可继续使用未协商时间戳的方式。WireGuard 节点承载 IPv4 流量。
+
+首次 SSH 主机密钥需要核对；公钥验证时可能需要再次触摸安全密钥。系统更新触发重启后会重新连接。其余部署步骤复用当前 SSH 连接。
+
+## 先保存并查看计划
+
+需要先检查选择时，分别执行：
+
+```powershell
 uv run vps-ops deploy init C:/private/node.yaml
+uv run vps-ops deploy plan C:/private/node.yaml
 uv run vps-ops deploy apply C:/private/node.yaml
 ```
 
-`init` 提示填写以下模式之一：
-
-| 模式        | 安装内容                                                | 额外准备                            |
-| ----------- | ------------------------------------------------------- | ----------------------------------- |
-| `tailscale` | 系统更新、SSH、防火墙、Tailscale 出口节点               | 登录 Tailscale 并批准出口节点       |
-| `mihomo`    | 系统更新、SSH、防火墙、三种协议、双指纹出口、订阅与证书 | 域名、公网 IPv4、邮箱、DNS API 凭据 |
-| `both`      | 两组能力，共用系统初始化                                | 上述全部                            |
-
-仅 Tailscale 无需域名或证书。Mihomo 即 Clash 内核，服务器安装代理入口；设备上的 Clash 客户端由你导入订阅。
-
-配置示例（仅 Tailscale）：
+计划列出已选服务、公网端口以及登录或证书准备。以下是仅 Clash、同时启用指纹和延迟的完整配置示例：
 
 ```yaml
-mode: tailscale
+mode: mihomo
+features:
+  fingerprint: true
+  rtt: true
 target: root@203.0.113.10
 port: 22
 name: my-vps
-public_key: C:/Users/YourName/.ssh/id_ecdsa_sk.pub
-identity: C:/Users/YourName/.ssh/id_ecdsa_sk
-```
-
-Mihomo 或 both 另需：
-
-```yaml
-mode: both
-domain: node.example.com
+device:
+  name: My device
+  platform: Windows
+public_key: C:/Users/YourName/.ssh/id_ed25519.pub
+identity: C:/Users/YourName/.ssh/id_ed25519
 public_ipv4: 203.0.113.10
+domain: node.example.com
 email: you@example.com
 dns_provider: dnspod
-# 可选：不指定时在 apply 中隐藏输入凭据。
 credential_file: C:/private/dns-credentials.json
 ```
 
-域名 A 记录应只指向节点公网 IPv4，不使用 CDN 代理；IPv4 节点不要发布该域名的 AAAA 记录。配置、凭据文件放在仓库外的受限目录。Windows 需确认 ACL 仅允许自己的账户访问。
+`identity` 可留空，使用本机 OpenSSH 配置。将 `mode` 改为 `both` 即增加 Tailscale。仅 Tailscale 的配置可删去 `public_ipv4`、`domain`、`email`、`dns_provider` 和 `credential_file`。`features.fingerprint` 和 `features.rtt` 分别控制两项能力；向导默认启用。原有未写 `features` 的配置保持原选择：Clash 开启指纹，WireGuard 不启用。
 
-### DNS 服务商与凭据
+## DNS 服务商与证书
 
-DNS 插件是 acme.sh 与解析服务商联系的适配器；选择服务商即可，无需编写 API 调用。
+所有服务商使用同一套 acme.sh DNS-01 申请、安装与续期流程。DNS-01 会临时创建 TXT 记录，无需开放 HTTP 验证端口。
 
-| dns_provider | acme.sh 插件 | 凭据 JSON 字段                      |
-| ------------ | ------------ | ----------------------------------- |
-| cloudflare   | dns_cf       | CF_Token（可另提供 CF_Account_ID）  |
-| aliyun       | dns_ali      | Ali_Key、Ali_Secret                 |
-| dnspod       | dns_tencent  | Tencent_SecretId、Tencent_SecretKey |
-| dnspod-token | dns_dp       | DP_Id、DP_Key                       |
+| `dns_provider` | acme.sh 插件  | 凭据 JSON 字段                          |
+| -------------- | ------------- | --------------------------------------- |
+| `cloudflare`   | `dns_cf`      | `CF_Token`，可另提供 `CF_Account_ID`    |
+| `aliyun`       | `dns_ali`     | `Ali_Key`、`Ali_Secret`                 |
+| `dnspod`       | `dns_tencent` | `Tencent_SecretId`、`Tencent_SecretKey` |
+| `dnspod-token` | `dns_dp`      | `DP_Id`、`DP_Key`                       |
 
-DNSPod 推荐使用腾讯云 API 密钥，入口为 [API 密钥管理](https://console.cloud.tencent.com/cam/capi)。使用获准管理目标域名解析的子账号；插件字段见 [acme.sh 腾讯云插件](https://github.com/acmesh-official/acme.sh/blob/master/dnsapi/dns_tencent.sh)。凭据文件示例：
+DNSPod 使用腾讯云 API 密钥，入口为 [API 密钥管理](https://console.cloud.tencent.com/cam/capi)。为获准管理目标域名解析的子账号创建密钥，写入私人 JSON 文件：
 
 ```json
 {
@@ -67,157 +105,83 @@ DNSPod 推荐使用腾讯云 API 密钥，入口为 [API 密钥管理](https://c
 }
 ```
 
-已有 DNSPod Token 的用户选择 dnspod-token，文件字段改为 DP_Id、DP_Key。其他服务商将 dns_provider 设置为 acme.sh 的 dns_插件名，并通过 dns_credentials 列出对应环境变量名。所有服务商共用证书申请、安装及续期流程。
+已有 DNSPod Token 时选择 `dnspod-token`。其他服务商将 `dns_provider` 写为 acme.sh 的 `dns_插件名`，并在 `dns_credentials` 中列出对应环境变量名。字段要求见对应的 [acme.sh DNS 插件](https://github.com/acmesh-official/acme.sh/tree/master/dnsapi)。不指定凭据文件时，部署会隐藏输入所需字段；非交互部署必须提供文件。
 
-DNS-01 通过临时 TXT 记录验证域名控制权，单独测试签发无需新公网 IP。完整公网节点部署还需可访问的服务器和正确的 A 记录。本机虚拟机可验证系统和内部代理路径；公网设备到新节点的访问另行验证。不要改动正在使用的生产订阅域名，可另建测试子域。
+证书和续期凭据保留在服务器，定时续期后自动刷新服务证书。重复部署复用仍有效的证书，剩余有效期不足 7 天时执行续期。
 
-### 执行过程与结果
+## 部署结果与设备导入
 
-apply 经原生 SSH 传输部署包，服务器本地 Ansible 安装和配置系统。部署会验证管理公钥、更新软件、按需重启，再连接并继续。首次密码登录切换到公钥和重启恢复时需要重新认证，其余任务复用连接。重装后如主机密钥发生变化，先从供应商控制台核对指纹，不跳过验证。
-
-安装代理时自动生成 `Windows` 和 `Apple` 两组设备身份及独立密码，同时生成一个可在所有已授权设备上使用的随机订阅地址。统一订阅始终提供两套身份的 VLESS、Hysteria2、AnyTLS 共六个节点。Caddy 根据更新请求的 User-Agent 调整默认节点及设备 TUN 设置；无法识别时仍返回全部节点，初始默认 Windows，可手动切换。所有配置均使用 DNS-over-HTTPS。Windows 由 Mihomo 自动路由；iOS 由 Clash 的 Network Extension 接管 VPN。统一链接通过 `deploy show subscriptions` 查看。身份保存在 /etc/vps-ops/identity.json，重复执行相同配置时复用。证书申请需要 DNS API 有效权限；凭据由 acme.sh 保存用于续期；剩余有效期不足 7 天时，重复部署会触发续期。失败后修正原因，再执行同一条 apply，不删除身份和证书文件。
-
-Tailscale 会给出网页登录地址，等待最多 15 分钟；登录后还需在控制台批准出口能力，再在设备端选择出口。超时可再次 apply 继续。
-
-完成后进入 vps-ops>，使用：
+Clash 部署成功后会进入 `vps-ops>` 管理会话。首次向导登记的设备已保存，再次部署不会新增设备或恢复已经撤销的设备。在这个管理会话输入：
 
 ```text
 status
 check
+device list
+device show "My device"
 usage report
-deploy show subscriptions
 ```
 
-仅 Tailscale 不运行 usage report 或查看订阅。完整订阅地址仅在明确执行 show 时读取，按私有数据保存。check all 对未安装能力显示 `skip`，对已安装能力检查实际功能。原始系统命令和配置编辑使用普通 SSH 终端。
+`device list` 显示设备名称、ID、默认平台和状态，不显示私有链接。`device show 名称或ID` 明确读取该设备的订阅地址。将地址只导入这台物理设备的 Clash 客户端并启用 TUN/VPN。不同物理设备各自登记、各用各的链接；每个链接都包含 Windows 和 Apple 两套指纹配置，可同时使用。两台 Windows 设备也有独立 WireGuard 密钥与地址，可以同时连接。
 
-## 手工安装与高级配置
+启用完整 TCP 链路（RTT）时，每个设备链接共八个节点；未启用时共六个节点。订阅更新请求的设备标识只调整默认节点和 TUN 设置，不改变此设备的认证凭据。识别失败时采用登记时保存的默认平台。在客户端的 `Nodes` 中可手动选择 `Windows · WireGuard` 或 `Apple · WireGuard`，以及需要的其他协议。关闭 TCP 指纹时，这两个标签用于选择此设备的不同认证配置，出口使用普通系统 TCP 栈。
 
-以下配置面向 Ubuntu、systemd 和 IPv4 出口。准备一台可管理的服务器、指向服务器的域名、DNS-01 证书，以及独立的设备认证信息。安装官方 Mihomo、Caddy、Tailscale、UFW、nftables、iproute2、Python 和 PyYAML；版本以各项目当前发布及服务器环境为准。
+为第二台设备登记独立订阅，在管理会话输入：
 
-## 安装统一 CLI
+```text
+device add
+```
 
-本机在仓库根目录构建可安装包：
+按提示填写唯一设备名称与默认平台，再用 `device show 名称或ID` 取链接。也可以直接输入 `device add "Second laptop" --platform Windows`。新增会即时更新代理认证、WireGuard peers 和订阅文件，其他设备继续连接。普通服务器 SSH 终端使用 `vps-ops device add`、`vps-ops device list` 和 `vps-ops device show "Second laptop"`；这些操作在服务器执行。
+
+撤销丢失或不再使用的设备：
+
+```text
+device revoke "Second laptop"
+```
+
+撤销后，该设备的三协议凭据、现有代理连接、WireGuard peers 和私有订阅 URL 一并失效；旧地址返回 404。其他设备不受影响，撤销设备的累计用量与名称仍保留。撤销记录清除密钥、密码和订阅令牌；再次为物理设备登记会创建新的独立身份。全部设备撤销后，公网代理监听入口 停止提供认证入口，随后 `device add` 可重新开放有认证的入口。
+
+如设备变更已保存而运行态更新报错，修正错误后在原管理会话运行 `device sync`。该命令同步已保存的注册表，无需重建安装包或重复添加设备。`deploy show subscriptions` 也可明确列出全部活跃设备的链接，按私人资料保存。
+
+WireGuard 使用 UDP 51820。服务器或本地网络需要允许该端口；受限网络可在 `Nodes` 中选择 VLESS、AnyTLS 或 Hysteria2。这三种代理协议使用各自 TCP 连接，不提供 WireGuard 的完整 TCP 链路。`check` 对 WireGuard 读取 peer 配置和真实握手，不用设备私钥发起服务端探测；尚未连接的设备显示等待客户端，任一指纹配置出现握手即可满足该设备的握手检查。
+
+Tailscale 安装后用约 5 秒发起登录，再显示网页登录地址。尚未授权时结果标为“节点已配置，Tailscale 等待授权”，并保留当前管理会话；同时选择 Clash 时，已通过检查的 Clash 和 WireGuard 可以立即使用。打开登录地址，在管理控制台批准出口能力，然后在当前会话执行 `check tailscale`，无需重新部署、编译或再次 SSH 认证。Tailscale 就绪后再在设备上选择此出口。仅 Tailscale 使用 `status` 和 `check`，无需导入 Clash 订阅。
+
+默认公网端口：Clash 使用 TCP 8443、UDP 8443、TCP 9444、TCP 9443；WireGuard 使用 UDP 51820；Tailscale 使用 UDP 41641。现有 SSH 端口始终保留。
+
+## 重试、改选与维护
+
+失败后按错误修正 SSH、DNS 或网络问题，再执行相同的 `deploy apply`。`init` 只新建配置；已有配置可用 `configure` 修改，重试使用 `apply`。Tailscale 等待网页登录时保留会话，授权后直接运行 `check tailscale`；实际部署错误修正后才需要重试 `apply`。服务器更换后若 SSH 主机密钥改变，先通过供应商控制台核对指纹，再更新本机记录。
+
+改变接入方式、指纹或完整链路时，再运行同一条 `deploy setup C:/private/node.yaml`。向导读取原有选择作为默认值，保留之前的 Tailscale、Clash 或两者同装选择，只需改选能力；默认保留 SSH、域名、邮箱和 DNS 凭据文件位置，确认需要修改这些信息时才再次询问。增加 Clash 而原配置缺少域名时，会自动补问所需信息。
+
+只保存改选结果、暂不部署时，在本机执行：
+
+```powershell
+uv run vps-ops deploy configure C:/private/node.yaml
+uv run vps-ops deploy plan C:/private/node.yaml
+uv run vps-ops deploy apply C:/private/node.yaml
+```
+
+可选文件路径可输入 `-` 清除，其他项目按回车保留原值。配置通过校验后才替换保存。部署会停用不再选择的服务并关闭它们拥有的公网规则。已有设备注册表、各设备订阅令牌、WireGuard 密钥、Tailscale 登录、证书和累计用量保留，重新启用时继续使用。工具拒绝接管未由其管理的已有代理或 Tailscale 安装。
+
+后续可通过一条命令进入同一个管理会话：
+
+```powershell
+uv run vps-ops connect root@203.0.113.10 --port 22
+```
+
+使用 `packages list`、`packages upgrade` 维护系统，`reboot` 重启，`service` 管理已启用服务，`logs` 查看脱敏日志。原始系统命令使用普通 SSH 终端。完整命令、成员配置和订阅策略见 [CLI 手册](USAGE.md)、[日常运维](OPERATIONS.md) 与 [订阅与规则](RULES.md)。
+
+## 开发与手动构建
+
+部署会构建并安装选中的项目指纹组件，更新安装包后会重新构建。Go 编译按低内存节点限制并发；仅 Tailscale 且关闭指纹时不安装代理、证书、Clash 用量服务或编译器。
+
+开发者构建可安装包：
 
 ```sh
 uv sync --locked
 uv build --wheel
 ```
 
-先在服务器普通 SSH 终端用 `sudo install -d -m 0700 /private` 创建安装包目录，再从本机上传。以下示例需要替换 IP 和 SSH 端口：
-
-```powershell
-scp -P 23899 dist/vps_network_ops-0.1.0-py3-none-any.whl root@203.0.113.10:/private/
-```
-
-同时将仓库源码放到服务器目录中。后续 `system/...` 路径均以服务器上的仓库根目录为当前目录。CLI 可单独用于已有部署；新服务器仍需继续完成下文的代理、证书与网络配置。
-
-在服务器普通 SSH 终端执行：
-
-```sh
-sudo apt-get install python3-venv python3-yaml
-sudo python3 -m venv --system-site-packages /opt/vps-ops
-sudo /opt/vps-ops/bin/pip install /private/vps_network_ops-0.1.0-py3-none-any.whl
-sudo ln -s /opt/vps-ops/bin/vps-ops /usr/local/bin/vps-ops
-sudo install -D -m 0600 system/vps-ops.example.yaml /etc/vps-ops/config.yaml
-sudoedit /etc/vps-ops/config.yaml
-vps-ops --help
-```
-
-将 `subscription_host` 改为真实订阅域名，端口按 Caddy 的实际配置填写。全部配置字段见 [CLI 手册](USAGE.md)。该配置必须存在才能运行服务器检查。普通 SSH 用户执行管理命令时使用 sudo；`connect` 直接进入远程 CLI，因此需要可执行这些管理操作的登录账户。
-
-以上为首次安装。更新已有 CLI 时只执行 pip 的安装命令并加 `--upgrade`，保留已有配置；随后重启 `mihomo-observed`，让采集器加载新代码。若 `/usr/local/bin/vps-ops` 已存在，先用 `ls -l` 确认安装位置，使用其对应 Python 环境更新，避免覆盖其他安装。
-
-## 构建指纹组件
-
-在 Linux 开发环境中按 [开发指南](DEVELOPMENT.md) 安装工具并运行 `make build`。将 `build/mirage-syn`、`build/syn_rewrite.o` 和仓库源码传到服务器，然后以仓库根目录为当前目录安装：
-
-```sh
-sudo install -d -m 0755 /usr/local/lib/tcpfp /usr/local/lib/tcpfp/ebpf
-sudo install -d -m 0700 /etc/tcpfp
-sudo install -m 0755 build/mirage-syn /usr/local/lib/tcpfp/mirage-syn
-sudo install -m 0644 build/syn_rewrite.o /usr/local/lib/tcpfp/ebpf/syn_rewrite.o
-sudo install -m 0755 /path/to/mihomo /usr/local/lib/tcpfp/mihomo
-sudo install -m 0755 system/tcpfp/network.py system/tcpfp/resolver.py system/tcpfp/engines.py system/tcpfp/syn_capture.py system/tcpfp/syn_preflight.py /usr/local/lib/tcpfp/
-sudo install -m 0700 system/tcpfp/network.sh /etc/tcpfp/network.sh
-sudo install -m 0600 system/tcpfp/preflight.py system/tcpfp/fingerprint-engines.json system/tcpfp/syn-windows.json /etc/tcpfp/
-```
-
-用服务器的公网 IPv4 和出口网卡生成规则，将结果安装到 `/etc/tcpfp`：
-
-```sh
-python3 system/tcpfp/render_assets.py --public-ipv4 "$SERVER_IPV4" --wan "$WAN" --output /private/tcpfp-network
-sudo install -m 0600 /private/tcpfp-network/host.nft /private/tcpfp-network/windows.nft /private/tcpfp-network/ios.nft /private/tcpfp-network/plan.json /etc/tcpfp/
-```
-
-根据 `system/tcpfp/backend.example.yaml` 分别创建 `/etc/tcpfp/windows.json` 与 `/etc/tcpfp/ios.json`。Windows 监听 `10.203.1.2:1080`，iPhone 监听 `10.203.2.2:1080`；各自使用独立 SOCKS 口令。后端文件归 root 所有，权限为 0600。
-
-## 配置入口与防护
-
-创建 `mihomo` 系统账户和工作目录，将官方 Mihomo 可执行文件安装为 `/usr/local/bin/mihomo`：
-
-```sh
-sudo useradd --system --user-group --home-dir /var/lib/mihomo --shell /usr/sbin/nologin mihomo
-sudo install -d -o mihomo -g mihomo -m 0700 /var/lib/mihomo /var/lib/mihomo/controller
-sudo install -d -o root -g mihomo -m 0750 /etc/mihomo /etc/mihomo-observed
-sudo install -m 0755 /path/to/mihomo /usr/local/bin/mihomo
-```
-
-参考 `system/mihomo/config.example.yaml` 创建 `/etc/mihomo/config.yaml`，填入订阅域名、服务器公网 IPv4、REALITY 密钥、设备 UUID、各协议口令和 SOCKS 后端口令。为不同设备及协议使用不同认证信息。
-
-配置写入后，使 Mihomo 和采集账户可读取各自文件：
-
-```sh
-sudo chown root:mihomo /etc/mihomo/config.yaml
-sudo chmod 0640 /etc/mihomo/config.yaml
-```
-
-将 `system/mihomo/mihomo-guard.nft` 中的 `MIHOMO_UID`、`VPS_IPV4`、`LISTEN_PORT` 和 `SUBSCRIPTION_PORT` 替换为实际值，安装到 `/etc/nftables.d/mihomo-guard.nft`。确认 SSH 管理端口、VLESS TCP 8443、Hysteria2 UDP 8443、AnyTLS TCP 9444 和订阅 TCP 9443 的入站规则。启用 IPv4 转发，并使该设置在重启后生效。
-
-通过 DNS-01 获取订阅域名证书。将 `system/mihomo/mihomo-tls.conf.in` 中的证书目录替换为实际目录，安装为 `mihomo.service` 的 drop-in；将 `renew-credential-refresh.sh.in` 的内容接入证书续期流程。参考 `system/caddy/Caddyfile.example` 配置 Caddy，并将订阅文件放在 `/srv/vps-subscriptions`。
-
-安装规则配置、工具和服务单元，并在 `/etc/vps-rules/rules.yaml` 中设置订阅域名和 SSH 地址：
-
-```sh
-sudo install -d -m 0700 /etc/vps-rules
-sudo install -m 0600 system/subscriptions/rules.yaml /etc/vps-rules/rules.yaml
-sudo install -D -m 0644 system/subscriptions/vps-rules.service /etc/systemd/system/vps-rules.service
-sudo install -D -m 0644 system/subscriptions/vps-rules.path /etc/systemd/system/vps-rules.path
-sudo systemctl daemon-reload
-sudo systemctl start vps-rules.service
-sudo systemctl enable --now vps-rules.path
-```
-
-规则和客户端更新方式见[订阅与规则](RULES.md)。
-
-## 安装并启动服务
-
-```sh
-sudo install -D -m 0644 system/mihomo/mihomo.service /etc/systemd/system/mihomo.service
-sudo install -D -m 0644 system/mihomo/mihomo-guard.service /etc/systemd/system/mihomo-guard.service
-sudo install -D -m 0644 system/mihomo/mihomo-observed.service /etc/systemd/system/mihomo-observed.service
-sudo install -D -m 0644 system/mihomo/mihomo-private-controller.conf /etc/systemd/system/mihomo.service.d/40-private-controller.conf
-sudo install -D -m 0644 system/tcpfp/systemd/tcpfp-network.service /etc/systemd/system/tcpfp-network.service
-sudo install -D -m 0644 system/tcpfp/systemd/tcpfp-windows-test.service /etc/systemd/system/tcpfp-windows-test.service
-sudo install -D -m 0644 system/tcpfp/systemd/tcpfp-ios-test.service /etc/systemd/system/tcpfp-ios-test.service
-sudo install -D -m 0644 system/tcpfp/systemd/tcpfp-syn-windows.service /etc/systemd/system/tcpfp-syn-windows.service
-sudo install -D -m 0644 system/tcpfp/systemd/tcpfp-syn-capture-windows.service /etc/systemd/system/tcpfp-syn-capture-windows.service
-sudo install -D -m 0644 system/tcpfp/systemd/tcpfp-windows-test.service.d/20-syn-capture.conf /etc/systemd/system/tcpfp-windows-test.service.d/20-syn-capture.conf
-
-```
-
-按 `system/mihomo/collector.example.json` 创建 `/etc/mihomo-observed/collector.json`，设置实际监听名称和用户标签。
-
-```sh
-sudo chown root:mihomo /etc/mihomo-observed/collector.json
-sudo chmod 0640 /etc/mihomo-observed/collector.json
-```
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now mihomo-guard tcpfp-network
-sudo systemctl enable --now tcpfp-syn-windows tcpfp-syn-capture-windows
-sudo systemctl enable --now tcpfp-windows-test tcpfp-ios-test mihomo
-sudo systemctl enable --now mihomo-observed caddy tailscaled
-```
-
-服务启动后运行 `sudo vps-ops check` 和 `sudo vps-ops usage report`。完整检查需要订阅目录已有三种协议的实际节点；订阅准备方法见 [CLI 手册](USAGE.md)。确认所有检查通过、用量 fresh 为 true，再从真实设备验证连接和订阅刷新。日常更新与重启见[日常运维](OPERATIONS.md)。
+该安装包包含服务模板和网络源码，安装到 Python 3.12 以上环境后可使用相同的部署入口。源码构建与各语言检查见 [开发指南](DEVELOPMENT.md)。

@@ -25,11 +25,14 @@ def command(*args, **kw):
 
 
 def download(spec, path):
-    with urllib.request.urlopen(spec[0], timeout=60) as response:
-        data = response.read()
-    if hashlib.sha256(data).hexdigest() != spec[1]:
+    checksum = hashlib.sha256()
+    with urllib.request.urlopen(spec[0], timeout=60) as response, path.open("wb") as output:
+        while chunk := response.read(1024 * 1024):
+            checksum.update(chunk)
+            output.write(chunk)
+    if checksum.hexdigest() != spec[1]:
+        path.unlink(missing_ok=True)
         raise RuntimeError("Download checksum mismatch")
-    path.write_bytes(data)
 
 
 def install(source, target, mode=0o644):

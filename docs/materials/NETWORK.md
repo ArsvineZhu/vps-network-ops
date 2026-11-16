@@ -38,11 +38,14 @@ TCP 代理分别终止设备端和服务器端连接。服务器读取 `TCP_INFO
 
 现有 SYN 重排只覆盖特定布局的 IPv4 SYN。除初始 TTL、MSS、SACK、窗口比例及选项顺序，检测系统还可能分析 DF/ECN、IPID、时间戳时钟增长、重传时序、拥塞控制行为、浏览器 TLS/HTTP2 指纹以及 UDP/QUIC 出口的一致性。把某一项伪装为 Apple 不会自动让整条 TCP 连接模拟 Darwin/XNU 内核。应以被动观测和性能基线检查这些特征，避免为追求单站评分修改已经工作的内核协商值。
 
-### 建议对照实验
+### 可复现实验
 
-1. 在同一客户端、网络和网站上分别测试 VLESS、Hysteria2、AnyTLS，记录多次浏览器时间、网站 TCP RTT、HTTP 版本及服务器端连接状态，避免单次测量偏差。
-2. 在 VPS 网络空间使用 `ss -ti` 观察实际出站连接 RTT，结合远端抓包验证 SYN 选项/TTL；比较不同协议的分布，而非只看平均值。
-3. 使用同一 VPS 的 Tailscale Exit Node 单独对照（关闭 Clash VPN），验证三层转发是否消除 TCP 连接的分段建连特征。它不增加代理跳数，但会改变整个运行形态和端到端拥塞控制。
-4. TTL 调整或 ACK 延迟只在可撤销的隔离网络空间测试，不混入已验证的生产 TCP 指纹路径。
+[TCP RTT 实验工具](../../experiments/tcp-rtt/README.md)提供 Windows 三协议与双身份的真实链路采集、VPS 隔离拓扑、服务端 TCP_INFO、ACK 延迟、抓包关联及三层出口对照；其中 `wireguard.py` 可在本地比较 SOCKS 与内核 WireGuard，并选用 Windows / Apple SYN 引擎。实验独立于生产服务；模拟链路在独立空间限速和排队。
 
-依据：[p0f 指纹格式](https://github.com/p0f/p0f/blob/master/docs/README)、[Linux TCP RTT 样本更新](https://github.com/torvalds/linux/blob/master/net/ipv4/tcp_input.c)、[TCP_INFO](https://github.com/torvalds/linux/blob/master/net/ipv4/tcp.c)、[RFC 6298](https://www.rfc-editor.org/rfc/rfc6298)、[tc-netem](https://man7.org/linux/man-pages/man8/tc-netem.8.html)。
+比较延迟时，使用同一连接上的小响应复用请求，同时保留新连接、TTFB、完整响应耗时和协议版本。新建 HTTPS 请求包含 TCP、TLS 等多次往返，不能用其总时间直接推导设备到 VPS 的 RTT。
+
+第三次握手的纯 ACK 被延迟后，紧随其后的 TLS ClientHello 仍携带 ACK，可以抢先完成目标端握手。持续延迟普通 ACK 能抬高平滑 RTT；同时观察最小 RTT、首次大响应、拥塞与重传，避免只用小响应结果选择方案。
+
+三层出口让客户端参与目标 TCP 连接的确认，目标 RTT 包含客户端至 VPS 的路径。Tailscale 使用内核转发模式，并记录直连或 DERP。现有 Mihomo 代理与原生三层出口可以在同一 VPS 上共存；客户端选择对应模式。三层模式的 TCP 连接由客户端参与确认。Clash 完整链路使用独立 WireGuard，设备身份由 peer 密钥与地址确定，可选 SYN 引擎在转发处处理对应指纹；原有代理协议继续按认证身份选择独立后端。
+
+依据：[p0f 指纹格式](https://github.com/p0f/p0f/blob/master/docs/README)、[Linux TCP RTT 样本更新](https://github.com/torvalds/linux/blob/v6.8/net/ipv4/tcp_input.c)、[TCP_INFO](https://github.com/torvalds/linux/blob/master/net/ipv4/tcp.c)、[RFC 6298](https://www.rfc-editor.org/rfc/rfc6298)、[tc-netem](https://man7.org/linux/man-pages/man8/tc-netem.8.html)。

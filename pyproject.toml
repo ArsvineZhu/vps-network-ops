@@ -10,6 +10,7 @@ dependencies = [
 ]
 
 [dependency-groups]
+tcp-rtt = ["dpkt==1.9.8"]
 dev = [
   "basedpyright>=1.40.2,<2",
   "pytest>=9.2,<10",

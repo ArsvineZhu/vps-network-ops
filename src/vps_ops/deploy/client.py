@@ -6,23 +6,48 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 from pathlib import Path
 from typing import cast
 
 import yaml
 
+from vps_ops.capabilities import Capabilities
+
 from .config import load
 
 
-def init(path, values):
+def settings(path):
+    destination = Path(path)
+    if not destination.exists():
+        return None
+    value = yaml.safe_load(destination.read_text(encoding="utf-8-sig"))
+    if not isinstance(value, dict):
+        raise ValueError("Deployment configuration must be a YAML object")
+    Capabilities.from_config(value)
+    return value
+
+
+def init(path, values, *, replace=False):
+    from vps_ops.files import save
+
+    from .config import preview
+
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        yaml.safe_dump(values, stream, allow_unicode=True)
-    load(destination)
-    return {"output": str(destination)}
+    content = yaml.safe_dump(values, allow_unicode=True)
+    with tempfile.TemporaryDirectory(prefix=".vps-ops-", dir=destination.parent) as folder:
+        candidate = Path(folder) / "node.yaml"
+        save(candidate, content)
+        selected = load(candidate)
+    if replace:
+        save(destination, content)
+    else:
+        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+    return {"output": str(destination), "plan": preview(selected)}
 
 
 def ssh(c, key_only=False):
@@ -31,9 +56,8 @@ def ssh(c, key_only=False):
     return ssh_command(c["target"], port=c["port"], identity=c.get("identity"), key_only=key_only)
 
 
-def bundle(c, prompt_secret):
+def bundle(c, prompt_secret, payload):
     root = Path(__file__).parent
-    payload = io.BytesIO()
     temporary = None
     checkout = root.resolve().parents[2]
     if (checkout / "pyproject.toml").exists():
@@ -45,7 +69,6 @@ def bundle(c, prompt_secret):
         )
         wheel = next((checkout / "build/deploy").glob("*.whl"))
     else:
-        import tempfile
         import zipfile
         from importlib.metadata import distribution
 
@@ -60,9 +83,14 @@ def bundle(c, prompt_secret):
                     output.write(str(package.locate_file(item)), str(item).replace("\\", "/"))
     try:
         credentials = {}
-        if c["mode"] != "tailscale":
+        if c["plan"]["mihomo"]:
             if c.get("credential_file"):
                 credentials = json.loads(Path(c["credential_file"]).read_text(encoding="utf-8-sig"))
+                if not isinstance(credentials, dict) or any(
+                    not isinstance(name, str) or not isinstance(value, str)
+                    for name, value in credentials.items()
+                ):
+                    raise ValueError("DNS credential_file must be a JSON object of text fields")
             for name in c["dns_names"]:
                 if name not in credentials:
                     if not sys.stdin.isatty():
@@ -72,17 +100,21 @@ def bundle(c, prompt_secret):
                     credentials[name] = prompt_secret(name)
                 if not isinstance(credentials[name], str) or not credentials[name]:
                     raise ValueError("DNS credential is empty")
-        with tarfile.open(fileobj=payload, mode="w:gz") as archive:
+        with tarfile.open(payload, mode="w:gz") as archive:
             archive.add(wheel, arcname=wheel.name)
             for name in ("bootstrap.sh", "base.yaml", "apply.yaml", "preflight.py"):
-                archive.add(root / name, arcname=name)
+                data = (root / name).read_text(encoding="utf-8-sig").encode()
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                info.mode = 0o700 if name.endswith(".sh") else 0o600
+                archive.addfile(info, io.BytesIO(data))
             for name, value in (("node.json", c), ("dns.json", credentials)):
                 data = json.dumps(value).encode()
                 info = tarfile.TarInfo(name)
                 info.size = len(data)
                 info.mode = 0o600
                 archive.addfile(info, io.BytesIO(data))
-        return payload.getvalue()
+        return payload
     finally:
         if temporary is not None:
             temporary.cleanup()
@@ -90,7 +122,13 @@ def bundle(c, prompt_secret):
 
 def apply(path, *, prompt_secret, notify, stream):
     c = load(path)
-    data = bundle(c, prompt_secret)
+    notify("preparing")
+    with tempfile.TemporaryDirectory(prefix="vps-ops-deploy-") as folder:
+        data = bundle(c, prompt_secret, Path(folder) / "deployment.tar.gz")
+        _apply(c, data, notify, stream)
+
+
+def _apply(c, data, notify, stream):
     key_verified = False
     for _attempt in range(3):
         command = (
@@ -98,7 +136,7 @@ def apply(path, *, prompt_secret, notify, stream):
             "exec 9>/var/lib/vps-ops/deploy.lock; "
             "flock -n 9 || { echo 'Another deployment is running'; exit 1; }; "
             "echo VPS_OPS_TRANSFER_READY; head -c "
-            + str(len(data))
+            + str(data.stat().st_size)
             + " | tar -xz -C /var/lib/vps-ops/deploy "
             "&& exec bash /var/lib/vps-ops/deploy/bootstrap.sh"
         )
@@ -120,7 +158,9 @@ def apply(path, *, prompt_secret, notify, stream):
                 if line == "VPS_OPS_TRANSFER_READY":
                     break
                 stream(line)
-            process.stdin.write(data)
+            with data.open("rb") as payload:
+                while chunk := payload.read(1024 * 1024):
+                    process.stdin.write(chunk)
             process.stdin.flush()
             for raw in process.stdout:
                 line = raw.decode(errors="replace").rstrip()
@@ -176,12 +216,12 @@ def apply(path, *, prompt_secret, notify, stream):
                 raise RuntimeError(
                     "Deployment failed; fix the reported issue and apply the same configuration again"
                 )
-            return
+            raise RuntimeError("Deployment ended before completion was reported")
         notify("rebooting")
         time.sleep(10)
         from vps_ops.transport import wait_ssh
 
-        wait_ssh(ssh(c), 300)
+        wait_ssh(ssh(c, key_only=key_verified), 300)
     raise RuntimeError("Node repeatedly requests a reboot; check system updates")
 
 

@@ -8,10 +8,8 @@ DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --n
 (
     umask 022
     python3 -m venv --system-site-packages /opt/vps-ops
-    /opt/vps-ops/bin/pip install ./*.whl
-    /opt/vps-ops/bin/pip install --no-deps --force-reinstall ./*.whl
+    /opt/vps-ops/bin/pip install --upgrade --force-reinstall ./*.whl
 )
-chmod -R a+rX /opt/vps-ops
 ln -sf /opt/vps-ops/bin/vps-ops /usr/local/bin/vps-ops
 python3 - <<'PYCONFIG'
 import json,os
@@ -27,8 +25,6 @@ echo VPS_OPS_KEY_READY
 read -r confirmed
 [[ $confirmed == KEY_VERIFIED ]] || exit 1
 install -d -m 0700 /etc/vps-ops
-cp node.json /etc/vps-ops/deployment.json
-chmod 600 /etc/vps-ops/deployment.json
 if [[ -e /var/run/reboot-required ]]; then
     systemctl reboot
     exit 42

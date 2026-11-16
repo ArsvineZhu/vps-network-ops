@@ -40,7 +40,7 @@ def collect(configured_services, selected_sections=(), *, summary=False, selecte
         query("memory", ["free", "-h"])
         query("disks", ["df", "-hT", "/"] if summary else ["df", "-hT"])
     if "network" in sections:
-        query("listeners", ["ss", "-lnt"])
+        query("listeners", ["ss", "-lntu"])
         query("routes", ["ip", "route"])
     if "firewall" in sections:
         query("firewall", ["ufw", "status"])

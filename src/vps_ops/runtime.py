@@ -6,19 +6,9 @@ from pathlib import Path
 
 import yaml
 
-SERVICES = [
-    "mihomo",
-    "mihomo-guard",
-    "caddy",
-    "tailscaled",
-    "mihomo-observed",
-    "tcpfp-network",
-    "tcpfp-windows-test",
-    "tcpfp-ios-test",
-    "tcpfp-syn-windows",
-    "tcpfp-syn-capture-windows",
-    "vps-rules.path",
-]
+from .capabilities import Capabilities
+
+SERVICES = Capabilities.from_config({}).services
 DEFAULT = {
     "services": SERVICES,
     "probe_url": "https://www.cloudflare.com/cdn-cgi/trace",
@@ -39,23 +29,21 @@ def run(args, timeout=25, input=None):
 def config(path):
     result = DEFAULT | (yaml.safe_load(Path(path).read_text()) or {})
     if "mode" in result:
-        from .deploy.config import services
-
-        selected = services(result["mode"])
-        if "services" not in (yaml.safe_load(Path(path).read_text()) or {}):
-            result["services"] = selected
+        result["services"] = Capabilities.from_config(result).services
     return result
 
 
-def published_subscription(c):
-    url = json.loads(Path("/etc/vps-ops/subscriptions.json").read_text())["auto"]
-    token = url.rsplit("/", 1)[-1].removesuffix(".yaml")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
-        raise RuntimeError("Invalid subscription index")
-    return url, {
-        target: Path(c["subscription_root"]) / (token + ("." + target if target else "") + ".yaml")
-        for target in ("", "Windows", "Apple")
-    }
+def published_subscriptions(c):
+    from .identity import subscription_files
+
+    index = json.loads(Path("/etc/vps-ops/subscriptions.json").read_text(encoding="utf-8"))
+    result = {}
+    for identifier, entry in index.items():
+        token = entry["url"].rsplit("/", 1)[-1].removesuffix(".yaml")
+        result[identifier] = dict(
+            entry, files=subscription_files(Path(c["subscription_root"]), token)
+        )
+    return result
 
 
 def resolver():
@@ -97,7 +85,6 @@ def curl(url, proxy=None, auth=None, resolve=None, user_agent=None, *, body=Fals
 
 
 def journal(args, c, *, machine=False):
-    import re
 
     secrets = set()
 
@@ -123,7 +110,7 @@ def journal(args, c, *, machine=False):
                 value = value.replace(secret, "[REDACTED]")
                 value = value.replace(json.dumps(secret, ensure_ascii=False)[1:-1], "[REDACTED]")
         value = re.sub(r"https?://[^\s\"']+", "[URLREDACTED]", value)
-        return re.sub(r"/s/(?:auto/)?[A-Za-z0-9_-]{43}[.]yaml", "/s/[REDACTED].yaml", value)
+        return re.sub(r"/s/[A-Za-z0-9_-]{43}[.]yaml", "/s/[REDACTED].yaml", value)
 
     def redact_tree(value):
         if isinstance(value, dict):

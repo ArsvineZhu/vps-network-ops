@@ -36,20 +36,57 @@ def _execute(argv):
         from . import prompts
         from .deploy import client
 
-        if a.action == "init":
-            data = client.init(a.deployment, prompts.deployment())
+        if a.action in ("init", "setup", "configure"):
+            previous = client.settings(a.deployment) if a.action != "init" else None
+            if a.action == "configure" and previous is None:
+                raise ValueError(
+                    "Saved deployment configuration was not found; use deploy init first"
+                )
+            data = client.init(
+                a.deployment, prompts.deployment(previous), replace=previous is not None
+            )
             output.emit(data, a.json, view="init")
-        elif a.action == "apply":
+        if a.action == "plan":
+            from .deploy.config import load, preview
+
+            output.emit(preview(load(a.deployment)), a.json, view="plan")
+        elif a.action in ("apply", "setup"):
             client.apply(
                 a.deployment,
                 prompt_secret=prompts.dns_secret,
                 notify=output.notice,
                 stream=output.write_line,
             )
+        elif a.action in ("init", "configure"):
+            pass
         elif a.deployment == "subscriptions":
             output.emit(client.subscriptions(), a.json, view="subscriptions")
         else:
             parser.error("deploy show only supports subscriptions")
+        return 0
+    if cmd == "device":
+        from . import devices, prompts
+
+        if a.action == "add":
+            selected = prompts.client_device(a.name, a.platform)
+            data = devices.add(selected["name"], selected["platform"])
+        elif a.action == "list":
+            data = devices.list_devices()
+        elif a.action == "show":
+            data = devices.show(a.device)
+        elif a.action == "sync":
+            data = devices.sync()
+        else:
+            data = devices.revoke(a.device)
+        output.emit(
+            data,
+            a.json,
+            view="devices"
+            if a.action == "list"
+            else "device-sync"
+            if a.action == "sync"
+            else "device",
+        )
         return 0
     if cmd == "member":
         from .new_member import create
@@ -131,14 +168,17 @@ def _execute(argv):
         return 0
     if cmd in ("check", "dns"):
         if cmd == "dns" and a.action == "repair":
-            resolver()
+            from .capabilities import Capabilities
+
+            plan = Capabilities.from_config(c)
+            if plan.mihomo and plan.fingerprint:
+                resolver()
         result = checks(c, a.section if cmd == "check" else "dns")
         output.emit(result, a.json)
         return int(any(item["state"] == "fail" for item in result))
     if cmd == "logs":
-        if a.service.removesuffix(".service") not in c["services"]:
-            parser.error("Service is not configured")
-        args = ["journalctl", "-u", a.service, "--since", a.since, "-n", str(a.lines), "--no-pager"]
+        name = status.select_services([a.service], c["services"])[0]
+        args = ["journalctl", "-u", name, "--since", a.since, "-n", str(a.lines), "--no-pager"]
         if a.json:
             args += ["-o", "json"]
         if a.follow:
@@ -151,9 +191,8 @@ def _execute(argv):
             records.close()
         return 0
     if cmd == "service":
-        if a.service not in c["services"]:
-            parser.error("Service is not configured")
-        args = ["systemctl", a.action, a.service, "--no-pager"]
+        name = status.select_services([a.service], c["services"])[0]
+        args = ["systemctl", a.action, name, "--no-pager"]
         if a.action == "status":
             args += ["--full", "--lines=0"]
         return subprocess.call(args)

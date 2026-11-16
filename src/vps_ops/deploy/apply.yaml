@@ -36,51 +36,49 @@
         url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
         dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
         mode: "0644"
-      when: node.mode != 'mihomo'
+      when: node.plan.tailscale
     - name: Add Tailscale official source
       ansible.builtin.get_url:
         url: https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list
         dest: /etc/apt/sources.list.d/tailscale.list
         mode: "0644"
-      when: node.mode != 'mihomo'
+      when: node.plan.tailscale
     - name: Install Tailscale
       ansible.builtin.apt:
         fail_on_autoremove: true
         force_apt_get: true
         name: tailscale
         update_cache: true
-      when: node.mode != 'mihomo'
-    - name: Open Tailscale UDP
-      ansible.builtin.command: ufw allow 41641/udp
-      changed_when: false
-      when: node.mode != 'mihomo'
-    - name: Allow tailnet management
-      ansible.builtin.command: ufw allow in on tailscale0
-      changed_when: false
-      when: node.mode != 'mihomo'
-    - name: Install proxy dependencies
+      when: node.plan.tailscale
+    - name: Install network dependencies
       ansible.builtin.apt:
         fail_on_autoremove: true
         force_apt_get: true
-        name:
-          [
-            caddy,
-            nftables,
-            iptables,
-            iproute2,
-            clang,
-            gcc,
-            libbpf-dev,
-            make,
-            tar,
-            openssl,
-          ]
-      when: node.mode != 'tailscale'
+        name: [nftables, iptables, iproute2, openssl, tar]
+      when: node.plan.mihomo or node.plan.fingerprint or node.plan.wireguard
+    - name: Install HTTPS subscription service
+      ansible.builtin.apt:
+        fail_on_autoremove: true
+        force_apt_get: true
+        name: [caddy, cron]
+      when: node.plan.mihomo
+    - name: Install selected local fingerprint compiler dependencies
+      ansible.builtin.apt:
+        fail_on_autoremove: true
+        force_apt_get: true
+        name: [clang, gcc, libbpf-dev, make]
+      when: node.plan.local_fingerprint
+    - name: Install WireGuard tools
+      ansible.builtin.apt:
+        fail_on_autoremove: true
+        force_apt_get: true
+        name: wireguard-tools
+      when: node.plan.wireguard
     - name: Create proxy service group
       ansible.builtin.group:
         name: mihomo
         system: true
-      when: node.mode != 'tailscale'
+      when: node.plan.mihomo
     - name: Create proxy service account
       ansible.builtin.user:
         name: mihomo
@@ -89,7 +87,7 @@
         create_home: false
         home: /var/lib/mihomo
         shell: /usr/sbin/nologin
-      when: node.mode != 'tailscale'
+      when: node.plan.mihomo
     - name: Set proxy directory ownership and access
       ansible.builtin.file:
         path: "{{ item.path }}"
@@ -113,8 +111,8 @@
             group: mihomo,
             mode: "0700",
           }
-      when: node.mode != 'tailscale'
-    - name: Generate and install proxy components
+      when: node.plan.mihomo
+    - name: Generate and install selected capabilities
       ansible.builtin.command:
         argv:
           [
@@ -125,7 +123,6 @@
             "{{ node.work }}",
           ]
       changed_when: false
-      when: node.mode != 'tailscale'
     - name: Issue and install the DNS certificate
       ansible.builtin.command:
         argv:
@@ -137,8 +134,8 @@
             "{{ node.work }}",
           ]
       changed_when: false
-      when: node.mode != 'tailscale'
-    - name: Start proxy services
+      when: node.plan.mihomo
+    - name: Start selected services
       ansible.builtin.command:
         argv:
           [
@@ -149,10 +146,3 @@
             "{{ node.work }}",
           ]
       changed_when: false
-      when: node.mode != 'tailscale'
-    - name: Enable Tailscale
-      ansible.builtin.systemd_service:
-        name: tailscaled
-        enabled: true
-        state: started
-      when: node.mode != 'mihomo'

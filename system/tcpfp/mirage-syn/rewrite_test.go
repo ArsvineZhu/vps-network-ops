@@ -187,12 +187,8 @@ func TestOptionBoundaries(t *testing.T) {
 			t.Fatal("invalid packet was rewritten")
 		}
 	}
-	p := fixture(t, IOS())
-	if out, changed, _, err := rewrite(p, Windows()); err != nil || changed || !bytes.Equal(out, p) {
-		t.Fatal("Windows accepted timestamp option")
-	}
 	// The same supported options in another order with EOL padding remain valid.
-	p = fixture(t, IOS())
+	p := fixture(t, IOS())
 	options := append([]byte{}, p[46:56]...)
 	options = append(options, p[40:46]...)
 	options = append(options, p[57:60]...)
@@ -225,4 +221,16 @@ func FuzzRewrite(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestWindowsDeclinesTimestampOffer(t *testing.T) {
+	input := fixture(t, IOS())
+	out, changed, _, err := rewrite(input, Windows())
+	if err != nil || !changed {
+		t.Fatalf("changed=%v error=%v", changed, err)
+	}
+	if len(out) != 52 || !bytes.Equal(out[40:], []byte{2, 4, 5, 140, 1, 3, 3, 7, 1, 1, 4, 2}) {
+		t.Fatalf("unexpected Windows offer: %x", out[40:])
+	}
+	assertChecksums(t, out)
 }

@@ -19,6 +19,12 @@ class Build(build_py):
             copy_function=shutil.copyfile,
             ignore=shutil.ignore_patterns("*.o", "__pycache__"),
         )
+        for resource in (Path(self.build_lib) / "vps_ops").rglob("*"):
+            if not resource.is_file() or "__pycache__" in resource.parts:
+                continue
+            resource.write_text(
+                resource.read_text(encoding="utf-8-sig"), encoding="utf-8", newline="\n"
+            )
 
 
 setup(cmdclass={"build_py": Build})

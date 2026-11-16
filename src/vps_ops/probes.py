@@ -9,10 +9,13 @@ from pathlib import Path
 
 import yaml
 
-from .runtime import curl, published_subscription
+from . import identity
+from .capabilities import Capabilities
+from .fingerprint_profiles import PROFILES
+from .runtime import curl, published_subscriptions, run
 
 
-def subscription(c, url, expected, *, user_agent=None, target=None):
+def subscription(c, device_id, url, expected, *, user_agent=None, target=""):
     """Verify delivered configuration without including credentials in diagnostics."""
     response = curl(
         url,
@@ -28,16 +31,17 @@ def subscription(c, url, expected, *, user_agent=None, target=None):
     if not isinstance(profile, dict) or profile != local:
         raise RuntimeError("Subscription response does not match the expected configuration")
     if target is not None:
+        state = identity.load()
+        device = state["devices"][device_id]
+        plan = Capabilities.from_config(c)
         frontend = yaml.safe_load(Path(c["frontend_config"]).read_text())
-        for platform in ("Windows", "Apple"):
-            routes = [
-                rule.split(",")
-                for rule in frontend["rules"]
-                if rule.startswith("IN-USER,") and rule.endswith("," + platform)
-            ]
-            if len(routes) != 1 or len(routes[0]) != 3:
-                raise RuntimeError("Server TCP route is missing or ambiguous for this identity")
-            user = routes[0][1]
+        for fingerprint in PROFILES:
+            platform = fingerprint.label
+            principal = device["profiles"][fingerprint.key]
+            user = principal["user"]
+            expected_route = platform if plan.fingerprint else "DIRECT"
+            if "IN-USER," + user + "," + expected_route not in frontend["rules"]:
+                raise RuntimeError("Server TCP route is missing for this identity")
             for protocol in ("vless", "hysteria2", "anytls"):
                 nodes = [
                     n
@@ -56,17 +60,39 @@ def subscription(c, url, expected, *, user_agent=None, target=None):
                     valid = nodes[0].get("password") == listeners[0]["users"].get(user)
                 if not valid:
                     raise RuntimeError("Subscription credentials do not match the server identity")
+            if plan.wireguard:
+                from .wireguard import client_node
+
+                nodes = [
+                    n
+                    for n in profile.get("proxies", [])
+                    if n.get("name") == platform + " · WireGuard"
+                ]
+                server = next(
+                    n["server"]
+                    for n in profile["proxies"]
+                    if n.get("name") == platform + " · VLESS"
+                )
+                if nodes != [client_node(state, device_id, fingerprint.key, server)]:
+                    raise RuntimeError(
+                        "Subscription WireGuard credentials do not match the server identity"
+                    )
         primary = next((g for g in profile.get("proxy-groups", []) if g["name"] == "Nodes"), {})
         names = {n["name"] for n in profile["proxies"]}
         if set(primary.get("proxies", [])) != names:
             raise RuntimeError("Node selector does not include every identity and protocol")
-        if primary.get("default-selected") != (target or "Windows") + " · VLESS":
+        suffix = " · WireGuard" if plan.wireguard else " · VLESS"
+        if primary.get("default-selected") != (target or device["platform"]) + suffix:
             raise RuntimeError("Subscription default does not match the detected platform")
     return "HTTP 200; subscription content and identities match"
 
 
-def frontend(c, protocol, target=None):
-    _, profiles = published_subscription(c)
+def frontend(c, protocol, target, *, device_id):
+    if protocol not in ("vless", "hysteria2", "anytls"):
+        raise ValueError(
+            "WireGuard health checks inspect peers without loading device private keys into a probe"
+        )
+    profiles = published_subscriptions(c)[device_id]["files"]
     nodes = yaml.safe_load(profiles[target or ""].read_text())["proxies"]
     node = next(
         (
@@ -123,3 +149,19 @@ def frontend(c, protocol, target=None):
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+
+
+def wireguard_peer(device_id, profile_key):
+    from .wireguard import peers
+
+    state = identity.load()
+    expected = next(
+        peer
+        for peer in peers(state)
+        if peer["device_id"] == device_id and peer["profile"] == profile_key
+    )
+    lines = run(["wg", "show", "vps-ops", "dump"]).splitlines()[1:]
+    matching = [line.split("\t") for line in lines if line.split("\t")[0] == expected["public"]]
+    if len(matching) != 1 or matching[0][3] != expected["address"] + "/32":
+        raise RuntimeError("WireGuard peer authentication or source address is missing")
+    return int(matching[0][4]) > 0

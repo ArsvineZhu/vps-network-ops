@@ -1,11 +1,40 @@
 #!/usr/bin/env python3
 """Approximate observed traffic, NOT billing. Scoped cumulative accounting. Never stores destinations/IPs/node credentials; retains connection IDs for deduplication."""
 
-import http.client
 import os
-import socket
 import sqlite3
 import stat
+from dataclasses import dataclass
+
+from .mihomo import connection_rows
+
+
+@dataclass(frozen=True)
+class UsageRecord:
+    identity: str
+    user: str
+    upload: int
+    download: int
+    source: str = "mihomo"
+    active: bool = True
+
+
+def mihomo_records(payload, inbounds, users):
+    rows = connection_rows(payload)
+    records = []
+    ignored = 0
+    for row in rows:
+        metadata = row.get("metadata", {})
+        if metadata.get("inboundName") not in inbounds or metadata.get("inboundUser") not in users:
+            ignored += 1
+            continue
+        records.append(
+            UsageRecord(
+                row.get("id"), metadata["inboundUser"], row.get("upload"), row.get("download")
+            )
+        )
+    validate_records(records)
+    return records, ignored
 
 
 def ensure_schema(db, instance, inbound):
@@ -25,6 +54,9 @@ def ensure_schema(db, instance, inbound):
     db.execute(
         "CREATE TABLE IF NOT EXISTS watermarks (id TEXT PRIMARY KEY, user TEXT, up INTEGER, down INTEGER, active INTEGER)"
     )
+    columns = {row[1] for row in db.execute("PRAGMA table_info(watermarks)")}
+    if "source" not in columns:
+        db.execute("ALTER TABLE watermarks ADD COLUMN source TEXT NOT NULL DEFAULT 'mihomo'")
     db.execute(
         "CREATE TABLE IF NOT EXISTS totals (user TEXT PRIMARY KEY, up INTEGER, down INTEGER)"
     )
@@ -47,54 +79,52 @@ def record_state(db, at, inbound, instance, state):
         raise
 
 
-def ingest(db, payload, at, inbound, users, instance):
-    if not isinstance(payload, dict) or "connections" not in payload:
-        raise ValueError("connections missing")
-    rows = payload["connections"]
-    if rows is None:
-        rows = []  # Official Go Snapshot marshals an idle nil slice as null.
-    if not isinstance(rows, list):
-        raise ValueError("connections malformed")
-    # Validate all records before committing any changes.
-    parsed = []
-    ignored = 0
-    for r in rows:
-        user = r.get("metadata", {}).get("inboundUser", "")
-        if r.get("metadata", {}).get("inboundName") != inbound or user not in users:
-            ignored += 1
-            continue
-        ident = r.get("id")
-        up, down = r.get("upload"), r.get("download")
-        if not isinstance(user, str) or not user or len(user) > 128:
-            continue
-        if not isinstance(ident, str) or not ident or len(ident) > 128:
-            raise ValueError()
+def validate_records(records):
+    for record in records:
+        if record.source not in {"mihomo", "wireguard"}:
+            raise ValueError("invalid source")
+        if any(
+            not isinstance(v, str) or not v or len(v) > 128 for v in (record.identity, record.user)
+        ):
+            raise ValueError("invalid identity")
         if any(
             not isinstance(v, int) or isinstance(v, bool) or v < 0 or v > 2**63 - 1
-            for v in (up, down)
+            for v in (record.upload, record.download)
         ):
-            raise ValueError()
-        parsed.append((ident, user, up, down))
-    if len({r[0] for r in parsed}) != len(parsed):
+            raise ValueError("invalid counters")
+    if len({r.identity for r in records}) != len(records):
         raise ValueError("duplicate ids")
 
-    if not instance or not inbound:
-        raise ValueError("scope required")
+
+def ingest(db, records, at, scope, instance, sources, *, ignored=0, state="observed"):
+    if state not in {"observed", "partial/gap"} or not sources <= {"mihomo", "wireguard"}:
+        raise ValueError("invalid sample state")
+    validate_records(records)
+    if any(record.source not in sources for record in records):
+        raise ValueError("Unexpected sample source")
     db.execute("BEGIN IMMEDIATE")
     try:
-        ensure_schema(db, instance, inbound)
+        ensure_schema(db, instance, scope)
         db.execute("INSERT INTO ignored_polls VALUES (?,?)", (at, ignored))
-        current = {r[0] for r in parsed}
-        prior_active = {r[0] for r in db.execute("SELECT id FROM watermarks WHERE active=1")}
-        db.execute("UPDATE watermarks SET active=0")
+        current = {r.identity for r in records if r.active}
+        prior_active = set()
+        for source in sources:
+            prior_active.update(
+                r[0]
+                for r in db.execute(
+                    "SELECT id FROM watermarks WHERE active=1 AND source=?", (source,)
+                )
+            )
+            db.execute("UPDATE watermarks SET active=0 WHERE source=?", (source,))
         resets = 0
-        for ident, user, up, down in parsed:
-            old = db.execute("SELECT user,up,down FROM watermarks WHERE id=?", (ident,)).fetchone()
+        for record in records:
+            ident, user, up, down = record.identity, record.user, record.upload, record.download
+            old = db.execute(
+                "SELECT user,up,down,source FROM watermarks WHERE id=?", (ident,)
+            ).fetchone()
             if old:
-                if old[0] != user:
+                if old[0] != user or old[3] != record.source:
                     raise ValueError("connection identity changed")
-                # Per-direction high-water marks prevent stale samples and counter falls
-                # from inflating either direction. Never discard marks on disappearance.
                 du, dd = max(0, up - old[1]), max(0, down - old[2])
                 if up < old[1] or down < old[2]:
                     resets += 1
@@ -106,12 +136,12 @@ def ingest(db, payload, at, inbound, users, instance):
                 (user, du, dd),
             )
             db.execute(
-                "INSERT INTO watermarks VALUES (?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET up=excluded.up,down=excluded.down,active=1",
-                (ident, user, up, down),
+                "INSERT INTO watermarks (id,user,up,down,active,source) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET up=excluded.up,down=excluded.down,active=excluded.active",
+                (ident, user, up, down, int(record.active), record.source),
             )
         db.execute(
             "INSERT INTO polls VALUES (?,?,?,?,?)",
-            (at, "observed", len(parsed), len(prior_active - current), resets),
+            (at, state, len(current), len(prior_active - current), resets),
         )
         db.commit()
     except Exception:
@@ -137,14 +167,3 @@ def private_db(path):
     if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise ValueError("unsafe database permissions")
     return sqlite3.connect(path)
-
-
-class UnixHTTP(http.client.HTTPConnection):
-    def __init__(self, path):
-        super().__init__("localhost", timeout=8)
-        self.path = path
-
-    def connect(self):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.settimeout(self.timeout)
-        self.sock.connect(self.path)

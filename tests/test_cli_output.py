@@ -180,12 +180,18 @@ def test_checks_and_subscription_addresses_are_formatted(monkeypatch, tmp_path, 
     assert "[pass] Certificate:\n  Start: today\n  Expires: next year" in capsys.readouterr().out
 
     subscription_file = tmp_path / "subscriptions.json"
-    subscriptions = {"auto": "https://example.invalid/s/auto/private.yaml"}
+    subscriptions = {
+        "device-id": {
+            "name": "Laptop",
+            "platform": "Windows",
+            "url": "https://example.invalid/s/private.yaml",
+        }
+    }
     subscription_file.write_text(json.dumps(subscriptions))
     monkeypatch.setattr(client, "Path", lambda _: subscription_file)
     assert cli.execute(["deploy", "show", "subscriptions"]) == 0
     output = capsys.readouterr().out
-    assert "auto: https://example.invalid/s/auto/private.yaml\n" in output
+    assert "Laptop (device-id): https://example.invalid/s/private.yaml\n" in output
     assert '{"' not in output
     assert cli.execute(["--json", "deploy", "show", "subscriptions"]) == 0
     assert json.loads(capsys.readouterr().out) == subscriptions
@@ -206,7 +212,7 @@ def test_structured_logs_are_readable_or_json_without_exposing_secrets(
     event = {
         "level": "error",
         "msg": "request failed",
-        "request": {"uri": f"/s/auto/{token}.yaml", "authorization": 'p"ss'},
+        "request": {"uri": f"/s/{token}.yaml", "authorization": 'p"ss'},
     }
     commands = []
 

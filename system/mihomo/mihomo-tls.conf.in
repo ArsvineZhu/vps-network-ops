@@ -1,6 +1,3 @@
-[Unit]
-Wants=tcpfp-windows-test.service tcpfp-ios-test.service
-After=tcpfp-windows-test.service tcpfp-ios-test.service
 [Service]
 LoadCredential=tls-fullchain.pem:@CERT_DIRECTORY@/fullchain.pem
 LoadCredential=tls-key.pem:@CERT_DIRECTORY@/key.pem

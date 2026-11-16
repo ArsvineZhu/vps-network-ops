@@ -2,7 +2,8 @@ import json
 import subprocess
 from pathlib import Path
 
-from .runtime import curl, published_subscription, run
+from .capabilities import Capabilities
+from .runtime import curl, published_subscriptions, run
 
 
 class CheckWarning(Exception):
@@ -11,6 +12,7 @@ class CheckWarning(Exception):
 
 def _checks(c, section):
     results = []
+    plan = Capabilities.from_config(c)
 
     def check(name, fn):
         try:
@@ -29,7 +31,7 @@ def _checks(c, section):
     if section == "all":
         for service in c["services"]:
             check(service, lambda s=service: run(["systemctl", "is-active", s]))
-    if section in ("all", "dns", "proxy"):
+    if plan.mihomo and plan.fingerprint and section in ("all", "dns", "proxy"):
         for role in ("windows", "ios"):
             ns = "tcpfp-" + role + "-test"
             if section in ("all", "dns"):
@@ -135,31 +137,55 @@ def _checks(c, section):
                     else (_ for _ in ()).throw(RuntimeError("Program is not attached"))
                 ),
             )
-    if section in ("all", "proxy"):
-        from .probes import frontend
+    if section in ("all", "proxy") and plan.forwarding_fingerprint:
+        check(
+            "Forwarding fingerprint",
+            lambda: run(["nft", "list", "table", "ip", "vps_fingerprint_forward"]) and "Active",
+        )
+    if section in ("all", "proxy") and plan.mihomo:
+        from .fingerprint_profiles import PROFILES
+        from .probes import frontend, wireguard_peer
 
-        for target in ("Windows", "Apple"):
-            for protocol in ("vless", "hysteria2", "anytls"):
-                check(
-                    target + " " + protocol + " authentication",
-                    lambda protocol=protocol, target=target: frontend(c, protocol, target),
-                )
+        for device_id, device in published_subscriptions(c).items():
+            for profile in PROFILES:
+                for protocol in ("vless", "hysteria2", "anytls"):
+                    check(
+                        device["name"] + " · " + profile.label + " " + protocol + " authentication",
+                        lambda protocol=protocol, target=profile.label, device_id=device_id: (
+                            frontend(c, protocol, target, device_id=device_id)
+                        ),
+                    )
+            if plan.wireguard:
+
+                def peer(device_id=device_id):
+                    handshakes = [wireguard_peer(device_id, profile.key) for profile in PROFILES]
+                    if not any(handshakes):
+                        raise CheckWarning(
+                            "Device peers configured; awaiting the first client connection"
+                        )
+                    return "Both profile peers configured; authenticated device handshake observed"
+
+                check(device["name"] + " WireGuard peer configuration", peer)
     if section in ("all", "subscription"):
         from .probes import subscription
 
-        def delivery(role, agent):
-            url, files = published_subscription(c)
-            return subscription(c, url, files[role], user_agent=agent, target=role)
-
-        for role, agent in (
-            ("Apple", "clash.meta/1.19 Clash/v1 Darwin/25.0 iPhone18,2"),
-            ("Windows", "clash-verge/v2.5.10"),
-            ("", "curl/8.11.0"),
-        ):
-            check(
-                "Subscription " + (role or "Unknown platform"),
-                lambda role=role, agent=agent: delivery(role, agent),
-            )
+        for device_id, device in published_subscriptions(c).items():
+            for role, agent in (
+                ("Apple", "clash.meta/1.19 Clash/v1 Darwin/25.0 iPhone18,2"),
+                ("Windows", "clash-verge/v2.5.10"),
+                ("", "curl/8.11.0"),
+            ):
+                check(
+                    "Subscription " + device["name"] + " · " + (role or "Saved default"),
+                    lambda role=role, agent=agent, device_id=device_id, device=device: subscription(
+                        c,
+                        device_id,
+                        device["url"],
+                        device["files"][role],
+                        user_agent=agent,
+                        target=role,
+                    ),
+                )
     if section in ("all", "certificate"):
 
         def cert():
@@ -176,25 +202,35 @@ def _checks(c, section):
     if section in ("all", "tailscale"):
 
         def ts():
-            state = json.loads(run(["tailscale", "status", "--json"]))
-            if state["BackendState"] != "Running":
-                raise RuntimeError("Tailscale " + state["BackendState"])
-            if c.get("mode") in ("tailscale", "both") and not state.get("Self", {}).get(
-                "ExitNodeOption", False
-            ):
-                raise CheckWarning("Signed in; awaiting exit-node approval in the console")
-            return "Online; exit-node capability approved" if c.get("mode") else "Online"
+            from .tailscale import status
+
+            current = status()
+            detail = current["detail"]
+            if current["auth_url"]:
+                detail += "\nSign in: " + current["auth_url"]
+            if current["state"] == "stopped":
+                raise RuntimeError(detail)
+            if current["state"] != "ready":
+                raise CheckWarning(detail)
+            return detail
 
         check("Tailscale", ts)
+        if plan.forwarding_fingerprint and not plan.mihomo:
+            check(
+                "Forwarding fingerprint",
+                lambda: run(["nft", "list", "table", "ip", "vps_fingerprint_forward"]) and "Active",
+            )
     return results
 
 
 def checks(c, section):
-    mode = c.get("mode", "both")
-    enabled = (
-        ["tailscale"] if mode == "tailscale" else ["dns", "proxy", "subscription", "certificate"]
-    )
-    if mode == "both":
+    plan = Capabilities.from_config(c)
+    enabled = []
+    if plan.mihomo:
+        enabled.extend(("proxy", "subscription", "certificate"))
+        if plan.fingerprint:
+            enabled.append("dns")
+    if plan.tailscale:
         enabled.append("tailscale")
     if section != "all":
         if section not in enabled:

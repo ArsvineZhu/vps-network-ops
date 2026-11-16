@@ -1,8 +1,20 @@
 """Native OpenSSH connection policy shared by deployment and daily operations."""
 
+import http.client
 import socket
 import subprocess
 import time
+
+
+class UnixHTTP(http.client.HTTPConnection):
+    def __init__(self, path):
+        super().__init__("localhost", timeout=8)
+        self.path = path
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.path)
 
 
 def ssh_command(target, port=None, user=None, identity=None, tty=False, key_only=False):
@@ -19,7 +31,7 @@ def ssh_command(target, port=None, user=None, identity=None, tty=False, key_only
     for flag, value in (("-p", port), ("-l", user), ("-i", identity)):
         if value is not None and value != "":
             result += [flag, str(value)]
-    if key_only and identity:
+    if identity:
         result += ["-o", "IdentitiesOnly=yes"]
     if key_only:
         result += ["-o", "PreferredAuthentications=publickey", "-o", "PasswordAuthentication=no"]

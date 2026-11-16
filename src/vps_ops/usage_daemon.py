@@ -2,6 +2,7 @@
 """Private Unix-socket observed-usage sampler. No traffic logs or external network."""
 
 import datetime
+import http.client
 import json
 import logging
 import os
@@ -12,7 +13,15 @@ import stat
 import threading
 import time
 
-from .observed_usage import UnixHTTP, ingest, private_db, record_state
+from .observed_usage import (
+    UsageRecord,
+    ingest,
+    mihomo_records,
+    private_db,
+    record_state,
+    validate_records,
+)
+from .transport import UnixHTTP
 
 MAX_RESPONSE = 8 * 1024 * 1024
 MAX_DATABASE = 512 * 1024 * 1024
@@ -28,9 +37,12 @@ def validate_config(c):
     if not isinstance(c, dict) or set(c) != {
         "socket",
         "db",
-        "inbound",
+        "scope",
+        "inbounds",
+        "wireguard_snapshot",
         "instance",
         "users",
+        "user_labels",
         "interval",
     }:
         raise ValueError("schema")
@@ -42,17 +54,39 @@ def validate_config(c):
         or not 1 <= c["interval"] <= 10
     ):
         raise ValueError("interval")
-    for key in ("inbound", "instance"):
+    for key in ("scope", "instance"):
         if not isinstance(c[key], str) or not c[key] or len(c[key]) > 128:
             raise ValueError("scope")
+    if c["wireguard_snapshot"] not in (None, "/run/vps-ops/wireguard-usage.json"):
+        raise ValueError("snapshot path")
+    if (
+        not isinstance(c["inbounds"], list)
+        or not c["inbounds"]
+        or any(not isinstance(v, str) or not v for v in c["inbounds"])
+    ):
+        raise ValueError("inbounds")
     users = c["users"]
     if (
         not isinstance(users, list)
-        or not users
         or any(not isinstance(x, str) or not x or len(x) > 128 for x in users)
         or len(set(users)) != len(users)
     ):
         raise ValueError("users")
+    labels = c["user_labels"]
+    if (
+        not isinstance(labels, dict)
+        or any(
+            not isinstance(user, str)
+            or not user
+            or len(user) > 128
+            or not isinstance(label, str)
+            or not label
+            or len(label) > 256
+            for user, label in labels.items()
+        )
+        or not set(users) <= set(labels)
+    ):
+        raise ValueError("user labels")
     return c
 
 
@@ -90,25 +124,89 @@ def fetch(path):
         connection.close()
 
 
+def wireguard_records(path, users):
+    file = pathlib.Path(path)
+    info = file.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o640:
+        raise ValueError("snapshot permissions")
+    if info.st_size > MAX_RESPONSE:
+        raise ValueError("snapshot oversized")
+    payload = json.loads(file.read_text())
+    age = time.time() - payload["time"]
+    if not 0 <= age <= 20:
+        raise ValueError("snapshot stale")
+    epoch = payload["epoch"]
+    if not isinstance(epoch, str) or not epoch or len(epoch) > 64:
+        raise ValueError("snapshot epoch")
+    records = [
+        UsageRecord(
+            "wg:" + epoch + ":" + row["user"],
+            row["user"],
+            row["upload"],
+            row["download"],
+            "wireguard",
+            False,
+        )
+        for row in payload["users"]
+        if row["user"] in users
+    ]
+    validate_records(records)
+    return records
+
+
 def sample(db, c, at):
+    records, ignored, sources = [], 0, set()
+    errors = False
     try:
-        payload = fetch(c["socket"])
-        ingest(db, payload, at, c["inbound"], set(c["users"]), c["instance"])
-        return True
-    except Exception:
-        record_state(db, at, c["inbound"], c["instance"], "gap/error")
+        parsed, ignored = mihomo_records(fetch(c["socket"]), set(c["inbounds"]), set(c["users"]))
+        records.extend(parsed)
+        sources.add("mihomo")
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, http.client.HTTPException):
+        errors = True
+    if c["wireguard_snapshot"]:
+        try:
+            records.extend(wireguard_records(c["wireguard_snapshot"], set(c["users"])))
+            sources.add("wireguard")
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+            http.client.HTTPException,
+        ):
+            errors = True
+    if not sources:
+        record_state(db, at, c["scope"], c["instance"], "gap/error")
         return False
+    try:
+        ingest(
+            db,
+            records,
+            at,
+            c["scope"],
+            c["instance"],
+            sources,
+            ignored=ignored,
+            state="partial/gap" if errors else "observed",
+        )
+    except (ValueError, sqlite3.Error):
+        record_state(db, at, c["scope"], c["instance"], "gap/error")
+        return False
+    return not errors
 
 
-def loop(db, c, stop):
-    record_state(db, stamp(), c["inbound"], c["instance"], "startup/gap")
+def loop(db, path, stop):
+    c = load_config(path)
+    record_state(db, stamp(), c["scope"], c["instance"], "startup/gap")
     previous = None
     healthy = None
-    delay = c["interval"]
     while not stop.is_set():
+        c = load_config(path)
+        delay = c["interval"]
         start = time.monotonic()
         if previous is not None and start - previous > delay * 1.5:
-            record_state(db, stamp(), c["inbound"], c["instance"], "gap/delayed")
+            record_state(db, stamp(), c["scope"], c["instance"], "gap/delayed")
         previous = start
         # Bounded storage without automatically deleting statistics or watermarks.
         pages = db.execute("PRAGMA page_count").fetchone()[0]
@@ -124,12 +222,12 @@ def loop(db, c, stop):
             )
             healthy = ok
         stop.wait(max(0, delay - (time.monotonic() - start)))
-    record_state(db, stamp(), c["inbound"], c["instance"], "stopped")
+    record_state(db, stamp(), c["scope"], c["instance"], "stopped")
 
 
 def report(db, c):
     scope = db.execute("SELECT instance,inbound FROM scope WHERE singleton=1").fetchone()
-    if scope != (c["instance"], c["inbound"]):
+    if scope != (c["instance"], c["scope"]):
         raise ValueError("scope mismatch")
     latest = db.execute("SELECT time,state FROM polls ORDER BY rowid DESC LIMIT 1").fetchone()
     last_ok = db.execute(
@@ -148,7 +246,7 @@ def report(db, c):
         {
             row[0]: row[1]
             for row in db.execute(
-                "SELECT user,count(*) FROM watermarks WHERE active=1 GROUP BY user"
+                "SELECT user,count(*) FROM watermarks WHERE active=1 AND source='mihomo' GROUP BY user"
             )
         }
         if fresh
@@ -161,12 +259,14 @@ def report(db, c):
         "users": [
             {
                 "user": u,
+                "label": c["user_labels"].get(u, u),
+                "active": u in c["users"],
                 "ever_observed": u in totals,
                 "upload_bytes": totals.get(u, (0, 0))[0],
                 "download_bytes": totals.get(u, (0, 0))[1],
                 "active_connections": active.get(u, 0) if fresh else None,
             }
-            for u in c["users"]
+            for u in dict.fromkeys([*c["users"], *totals])
         ],
     }
 
@@ -207,6 +307,6 @@ def serve(path):
             stop = threading.Event()
             for sig in (signal.SIGTERM, signal.SIGINT):
                 signal.signal(sig, lambda *args: stop.set())
-            loop(db, c, stop)
+            loop(db, path, stop)
         finally:
             db.close()

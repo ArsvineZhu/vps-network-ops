@@ -17,10 +17,10 @@ listeners:
     listen: 0.0.0.0
     port: 8443
     users:
-      - username: windows-test
+      - username: REPLACE_WITH_DEVICE_WINDOWS_USER
         uuid: REPLACE_WITH_WINDOWS_UUID
         flow: xtls-rprx-vision
-      - username: ios-test
+      - username: REPLACE_WITH_DEVICE_APPLE_USER
         uuid: REPLACE_WITH_IOS_UUID
         flow: xtls-rprx-vision
     reality-config:
@@ -35,8 +35,8 @@ listeners:
     certificate: /run/credentials/mihomo.service/tls-fullchain.pem
     private-key: /run/credentials/mihomo.service/tls-key.pem
     users:
-      windows-test: REPLACE_WITH_WINDOWS_HYSTERIA2_PASSWORD
-      ios-test: REPLACE_WITH_IOS_HYSTERIA2_PASSWORD
+      REPLACE_WITH_DEVICE_WINDOWS_USER: REPLACE_WITH_WINDOWS_HYSTERIA2_PASSWORD
+      REPLACE_WITH_DEVICE_APPLE_USER: REPLACE_WITH_IOS_HYSTERIA2_PASSWORD
     ignore-client-bandwidth: true
   - name: anytls-in
     type: anytls
@@ -45,8 +45,8 @@ listeners:
     certificate: /run/credentials/mihomo.service/tls-fullchain.pem
     private-key: /run/credentials/mihomo.service/tls-key.pem
     users:
-      windows-test: REPLACE_WITH_WINDOWS_ANYTLS_PASSWORD
-      ios-test: REPLACE_WITH_IOS_ANYTLS_PASSWORD
+      REPLACE_WITH_DEVICE_WINDOWS_USER: REPLACE_WITH_WINDOWS_ANYTLS_PASSWORD
+      REPLACE_WITH_DEVICE_APPLE_USER: REPLACE_WITH_IOS_ANYTLS_PASSWORD
 proxies:
   - name: Windows
     type: socks5
@@ -82,8 +82,8 @@ rules:
   - IP-CIDR,224.0.0.0/4,REJECT
   - IP-CIDR,240.0.0.0/4,REJECT
   - IP-CIDR6,::/0,REJECT
-  - AND,((IN-USER,windows-test),(NETWORK,UDP)),DIRECT
-  - IN-USER,windows-test,Windows
-  - AND,((IN-USER,ios-test),(NETWORK,UDP)),DIRECT
-  - IN-USER,ios-test,Apple
+  - AND,((IN-USER,REPLACE_WITH_DEVICE_WINDOWS_USER),(NETWORK,UDP)),DIRECT
+  - IN-USER,REPLACE_WITH_DEVICE_WINDOWS_USER,Windows
+  - AND,((IN-USER,REPLACE_WITH_DEVICE_APPLE_USER),(NETWORK,UDP)),DIRECT
+  - IN-USER,REPLACE_WITH_DEVICE_APPLE_USER,Apple
   - MATCH,DIRECT

@@ -17,8 +17,8 @@ type SynConfig struct {
 	StatusInterval string `yaml:"status_interval"`
 }
 
-// The queue is scoped by the deployment-owned rule inside an exclusive network
-// namespace. The daemon never installs or removes firewall rules.
+// Deployment-owned firewall rules scope each queue to its traffic path.
+// The daemon never installs or removes firewall rules.
 type Config struct {
 	Interface string    `yaml:"interface"`
 	SYN       SynConfig `yaml:"syn"`

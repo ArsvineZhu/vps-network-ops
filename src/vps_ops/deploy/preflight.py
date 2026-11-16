@@ -29,25 +29,20 @@ def verify(c):
             "SSH connection information is missing; cannot preserve the management port"
         )
     marker = Path("/etc/vps-ops/deployment.json")
-    if marker.exists():
-        previous = json.loads(marker.read_text())
-        if previous["mode"] != c["mode"]:
-            raise RuntimeError(
-                "Existing node uses another deployment mode; automatic mode migration is not supported"
-            )
-    else:
+    if not marker.exists():
         for path in (
             "/etc/mihomo/config.yaml",
             "/etc/caddy/Caddyfile",
             "/etc/tailscale/tailscaled.conf",
             "/var/lib/tailscale/tailscaled.state",
             "/etc/clash/config.yaml",
+            "/etc/wireguard/vps-ops.conf",
         ):
             if Path(path).exists():
                 raise RuntimeError("Unmanaged configuration already exists: " + path)
         if subprocess.run(["systemctl", "is-active", "--quiet", "tailscaled"]).returncode == 0:
             raise RuntimeError("An unmanaged Tailscale node already exists")
-    if c["mode"] != "tailscale":
+    if c["plan"]["mihomo"]:
         addresses = {x[4][0] for x in socket.getaddrinfo(c["domain"], None, socket.AF_INET)}
         if addresses != {c["public_ipv4"]}:
             raise RuntimeError(

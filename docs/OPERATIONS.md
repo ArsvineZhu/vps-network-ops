@@ -18,20 +18,30 @@ check
 usage report
 ```
 
-status 默认显示系统、资源和服务概览；需要全部信息使用 `status --all`，单独查服务可用 `status --service mihomo`。check 验证两个指纹出口、三个协议入口、DNS、订阅、证书和 Tailscale。确认检查全部通过，用量数据状态正常。后续操作复用当前登录，输入 exit 才退出。
+status 默认显示系统、资源和服务概览；需要全部信息使用 `status --all`，单独查服务可用 `status --service mihomo`。check 按已选能力验证指纹出口、三个协议入口、WireGuard、DNS、订阅、证书和 Tailscale。仅 Tailscale 无需 usage report。确认检查全部通过，用量数据状态正常。后续操作复用当前登录，输入 exit 才退出。
 
 已在普通 SSH 终端登录时，直接运行 vps-ops status、vps-ops check，无需新建连接。以下代码块均为普通服务器终端命令；在 CLI 提示符下省略 vps-ops 前缀。
 
+## 修改接入与网络能力
+
+在本机运行 `uv run vps-ops deploy configure C:/private/node.yaml`，在向导中改选接入方式、TCP 指纹或完整 TCP 链路。回车保留已有默认值；默认不重问 SSH、域名与凭据路径。保存后执行 `deploy plan` 查看，再执行同一份配置的 `deploy apply`。也可用 `deploy setup` 在改选后立即部署。工具更新已管理服务与防火墙，保留身份、密钥、订阅、证书和累计用量。不要通过删除这些业务数据重装节点。
+
+## 完成 Tailscale 授权
+
+部署结果提示 Tailscale 等待登录时，打开输出的网页登录地址并在管理控制台批准出口节点。当前 SSH 管理会话继续保留；完成后执行 `check tailscale`。同时安装的 Clash 和 WireGuard 已就绪时可立即使用，无需等待 Tailscale 或重新执行部署。`warning` 提示尚未完成的登录或授权，服务故障显示 `fail`。
+
 ## 定位故障
 
-| 现象                     | 先执行                                                  |
-| ------------------------ | ------------------------------------------------------- |
-| 网络空间或两个后端未启动 | vps-ops logs tcpfp-network                              |
-| Windows 出口失败         | vps-ops logs tcpfp-syn-windows，再查 tcpfp-windows-test |
-| iPhone 出口失败          | vps-ops logs tcpfp-ios-test                             |
-| 域名解析失败             | vps-ops dns diagnose                                    |
-| 订阅返回失败             | vps-ops logs caddy                                      |
-| 用量 fresh 为 false      | vps-ops logs mihomo-observed                            |
+| 现象                     | 先执行                                                    |
+| ------------------------ | --------------------------------------------------------- |
+| 网络空间或两个后端未启动 | vps-ops logs tcpfp-network                                |
+| Windows 出口失败         | vps-ops logs tcpfp-syn-windows，再查 tcpfp-windows-test   |
+| iPhone 出口失败          | vps-ops logs tcpfp-ios-test                               |
+| 域名解析失败             | vps-ops dns diagnose                                      |
+| 订阅返回失败             | vps-ops logs caddy                                        |
+| WireGuard 节点失败       | vps-ops logs wg-quick@vps-ops，再查 vps-wireguard-network |
+| 三层指纹出口失败         | vps-ops logs vps-fingerprint-forward                      |
+| 用量 fresh 为 false      | vps-ops logs mihomo-observed                              |
 
 只复查受影响路径：
 
@@ -79,19 +89,21 @@ uv run vps-ops connect root@203.0.113.10 --port 23899 --wait 300
 
 登录后运行 `status --system`、`check`、`usage report`。启动标识应改变，失败服务应为 0，所有检查通过，用量采样恢复。端口恢复后其他服务可能仍在启动，按失败项查询日志并处理。检查完成后保留登录，供后续操作使用。
 
-## 修改入口或添加用户
+## 添加、查看与撤销设备
 
-入口配置在 /etc/mihomo/config.yaml。客户端和新用户材料的生成步骤见[CLI 手册](USAGE.md)。每种设备使用独立身份，并将该设备的 UDP 规则放在其 TCP 出口规则之前。
+在现有 `vps-ops>` 管理会话输入：
 
-在普通 SSH 终端修改配置后检查，再重启：
-
-```sh
-/usr/local/bin/mihomo -t -d /var/lib/mihomo -f /etc/mihomo/config.yaml
-vps-ops service restart mihomo
-vps-ops check proxy
+```text
+device list
+device add
+device show "My phone"
 ```
 
-随后从新用户的真实客户端验证连接。member create 输出待注册用户材料，需手动加入目标 listener 并配置设备路由。
+添加向导询问唯一名称及默认平台，然后即时应用认证和订阅。每台物理设备使用自己的私有链接，链接中包含两套可同时使用的 Windows / Apple 指纹配置。设备列表只显示名称、ID、默认平台和状态；明确运行 `device show 名称或ID` 才显示链接。普通服务器终端使用 `vps-ops device ...`。
+
+不再使用的设备运行 `device revoke 名称或ID`。其三协议认证、现有连接、WireGuard peers 与订阅 URL 即时失效，其他设备继续使用。用量报告保留历史名称和累计值。全部设备撤销时，公网代理不保留匿名监听入口；随后添加设备会恢复有认证的入口。
+
+设备更新报错且提示已保存时，处理错误后运行 `device sync`，将保存的注册表应用到运行服务，无需重复添加或重新部署。设备变更与部署复用同一锁，正在执行其他变更时稍后重试。
 
 ## 更新订阅策略
 

@@ -13,6 +13,12 @@ def parser():
     commands = root.add_subparsers(dest="command", required=True)
 
     descriptions = {
+        "device": "Register, list, show or revoke a device on this node",
+        "add": "Register a device and apply its credentials immediately",
+        "list": "List device identities without private URLs",
+        "show": "Show a device and its private subscription URL",
+        "revoke": "Revoke device credentials and remove its subscription",
+        "sync": "Apply saved device changes to running services",
         "connect": "Open a persistent remote CLI session over OpenSSH",
         "shell": "Run commands in an interactive session",
         "status": "Show a server summary or selected status sections",
@@ -104,6 +110,18 @@ def parser():
         "--seconds", type=float, default=10, help="Timeout in seconds (default: 10)"
     )
 
+    device = command("device").add_subparsers(dest="action", required=True)
+    add = command("add", device)
+    add.add_argument("name", nargs="?", help="Unique name for this physical device")
+    add.add_argument(
+        "--platform", choices=["Windows", "Apple"], help="Default profile for an unknown client"
+    )
+    command("list", device)
+    command("sync", device)
+    for action in ("show", "revoke"):
+        entry = command(action, device)
+        entry.add_argument("device", help="Device ID or active device name")
+
     member = command("member").add_subparsers(dest="action", required=True)
     create = command("create", member)
     create.add_argument("public_template", type=Path, help="Public server descriptor JSON")
@@ -141,6 +159,6 @@ def parser():
         "--min-days", type=int, default=7, help="Minimum remaining validity (default: 7 days)"
     )
     deploy = command("deploy")
-    deploy.add_argument("action", choices=["init", "apply", "show"])
+    deploy.add_argument("action", choices=["setup", "init", "configure", "plan", "apply", "show"])
     deploy.add_argument("deployment", help="Private YAML path, or subscriptions for show")
     return root

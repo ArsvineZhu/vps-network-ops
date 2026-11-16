@@ -5,15 +5,34 @@
 从出厂 Ubuntu 24.04 AMD64 起步：
 
 ```powershell
-uv run vps-ops deploy init C:/private/node.yaml
-uv run vps-ops deploy apply C:/private/node.yaml
+uv run vps-ops deploy setup C:/private/node.yaml
 ```
 
-选择 tailscale、mihomo 或 both；仅 Tailscale 不需要域名和 DNS 凭据。首次密码登录、公钥切换、DNSPod 凭据和重启恢复见[部署指南](DEPLOYMENT.md)。部署成功后进入交互会话；已安装代理时用 `deploy show subscriptions` 明确读取私有订阅地址，使用 `deploy show subscriptions --json` 获取 JSON。 当前自动部署展示一条共享订阅 URL；Windows 和 iPhone 可使用同一 URL，更新时均获取 Windows、Apple 共六个节点，设备识别只调整默认选中项。
+新建向导默认选择 Clash（Mihomo），启用指纹与独立 WireGuard 完整链路，无需 Tailscale 账户。也可选择仅 Tailscale 或两者同装。Clash 首次部署登记首台设备名称及默认平台，为该设备创建独立订阅及两套指纹配置。准备、公钥、DNS 凭据与重启恢复见[部署指南](DEPLOYMENT.md)。
+
+`deploy init` 新建配置，`deploy configure` 修改已有选择，`deploy plan` 查看依赖，`deploy apply` 执行或重试。再次运行 `deploy setup` 保留已存值作为默认并直接部署。改选保留设备注册表，不会恢复已撤销设备。
+
+## 设备登记与私有链接
+
+部署后的管理会话可连续输入：
+
+```text
+device list
+device show "My device"
+device add
+device revoke "Second laptop"
+device sync
+```
+
+`device add` 不带参数时询问唯一名称与默认平台；也可直接运行 `device add "Second laptop" --platform Windows`。每台物理设备独立登记，每个链接都包含此设备的 Windows、Apple 两套配置，可同时使用；两台相同平台的设备也有不同密钥与 WireGuard 地址。`device list` 不显示秘密；`device show` 明确显示指定设备的私有 URL。参数可使用设备 ID 或活跃设备的名称；已撤销记录通过 ID 查看。
+
+`device revoke` 即时撤销该设备全部三协议凭据和连接、WireGuard peers 及订阅文件，保留累计用量和历史名称。`device sync` 用于设备变更保存后运行态更新失败的恢复，将注册表重新应用到服务，不重建安装包。普通服务器终端在上述命令前加 `vps-ops`；本机通过 `connect` 进入管理会话后省略前缀。
+
+这些命令支持 `--json`。`deploy show subscriptions` 可明确读取全部活跃设备的私有链接；默认状态和设备列表均不显示链接。设备 UA 只影响默认指纹及 TUN，识别失败使用保存的平台；三个响应变体的认证凭据相同。
 
 ## 安装与运行位置
 
-本机需要 Python 3.12 及以上版本、uv 和 OpenSSH。在仓库根目录执行：
+本机需要 uv 和 OpenSSH；uv 会自动准备 Python。在仓库根目录执行：
 
 ```powershell
 uv sync --locked
@@ -82,7 +101,7 @@ services:
 
 只写需要覆盖的字段即可。subscription_host 必须改为真实订阅域名；subscription_port 为 Caddy HTTPS 端口；subscription_root 为订阅目录。probe_url 必须返回 HTTP 200。frontend_config 指向入口配置，供日志过滤读取已知认证值。services 若提供会替换整个默认列表，也决定服务控制和日志查询允许使用的名称。
 
-自动部署还会写入 mode，取 tailscale、mihomo 或 both。mode 缺省时按 both 处理；未显式提供 services 时根据模式派生服务列表。check all 对未启用能力显示 `skip`，不会把未安装 Mihomo 或 Tailscale 当作故障。
+自动部署写入 `name`、`wan`、`mode` 与 `features`，其中 `features.fingerprint` 和 `features.rtt` 为布尔值。存在 `mode` 时，服务清单统一由这些选择派生；`services` 展示派生结果。改选使用本机的 `deploy configure` 向导，默认保留 SSH 和 DNS 等已有信息，再执行 `deploy apply` 更新节点。未提供 `mode` 的手动安装可继续指定 `services`。`check all` 对未启用能力显示 `skip`。
 
 全局参数放在子命令之前：
 
@@ -119,7 +138,7 @@ vps-ops check tailscale
 | `--resources`    | 内存、交换空间和全部挂载的磁盘             |
 | `--services`     | 配置中全部服务的状态和系统失败单元         |
 | `--service 名称` | 指定服务的状态，可重复；服务名必须在配置中 |
-| `--network`      | TCP 监听、路由和网络空间                   |
+| `--network`      | TCP / UDP 监听、路由和网络空间             |
 | `--firewall`     | 防火墙规则                                 |
 | `--updates`      | 待更新软件包和重启提示                     |
 | `--errors`       | 最近 24 小时的系统错误数量                 |
@@ -131,18 +150,18 @@ vps-ops check tailscale
 
 check 默认等同 check all，单项失败后继续检查其他项：
 
-| 范围         | 实际检查                                                                                                         |
-| ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| all          | 配置服务均 active，并执行以下全部检查                                                                            |
-| dns          | 两个网络空间解析 www.cloudflare.com，并访问 probe_url                                                            |
-| proxy        | 两个认证 SOCKS 出口、Windows 队列与捕获、iPhone eBPF，以及Windows、Apple 两套身份的三个协议临时客户端 HTTPS 请求 |
-| subscription | 校验域名、TLS、HTTP 状态与实际配置内容；统一订阅验证双身份三协议凭据、TCP 出口规则、设备默认项及未识别设备回退   |
-| certificate  | Mihomo 运行凭据中的证书主机名和有效期，要求剩余超过 7 天                                                         |
-| tailscale    | 本机 Tailscale BackendState 为 Running                                                                           |
+| 范围         | 实际检查                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| all          | 配置服务均 active，并执行以下全部检查                                                                                                      |
+| dns          | 两个网络空间解析 www.cloudflare.com，并访问 probe_url                                                                                      |
+| proxy        | 启用指纹时检查两个 SOCKS 出口、队列与 eBPF；检查每台设备两套指纹配置的三个协议；WireGuard 检查 peer 配置与真实握手，不使用设备私钥发起探测 |
+| subscription | 校验域名、TLS、HTTP 状态与实际配置内容；每设备订阅验证其两套指纹配置的各协议与 WireGuard 凭据、TCP 出口规则和默认项                        |
+| certificate  | Mihomo 运行凭据中的证书主机名和有效期，要求剩余超过 7 天                                                                                   |
+| tailscale    | 检查实际登录、设备授权与出口批准状态；等待授权显示 warning 和登录地址，就绪后显示 pass                                                     |
 
 结果的 `state` 为 `pass`、`warning`、`fail` 或 `skip`；`warning` 表示仍需操作，例如批准 Tailscale 出口能力。JSON 每项包含 name、state、detail。check 成功返回 0，有失败返回 1。参数错误通常返回 2；底层命令可能保留自己的退出码。status 返回成功表示报告生成，仍需阅读其中的失败状态。
 
-完整检查使用项目当前部署：网络空间 tcpfp-windows-test 和 tcpfp-ios-test，指纹工具在 /usr/local/lib/tcpfp，Mihomo 在 /usr/local/bin/mihomo。两个后端须运行并提供 systemd 凭据；订阅中须有 vless、hysteria2、anytls 节点。临时客户端配置结束后删除。协议探测从服务器发起；设备到 VPS 的连接问题还需在对应设备重现。
+完整检查按已选能力执行：指纹网络空间为 tcpfp-windows-test 和 tcpfp-ios-test，工具在 /usr/local/lib/tcpfp，Mihomo 在 /usr/local/bin/mihomo。开启 WireGuard 时读取实际 peer、地址及握手；每台设备任一配置已握手即可通过，尚未连接显示等待客户端。临时客户端配置结束后删除。协议探测从服务器发起；设备到 VPS 的连接问题还需在对应设备重现。
 
 ## 日志、服务和用量
 

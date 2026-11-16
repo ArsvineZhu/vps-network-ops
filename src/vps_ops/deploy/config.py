@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from vps_ops.runtime import SERVICES
+from vps_ops.capabilities import MODES, Capabilities
 
 DNS = {
     "cloudflare": ("dns_cf", ["CF_Token"]),
@@ -14,17 +14,6 @@ DNS = {
     "dnspod": ("dns_tencent", ["Tencent_SecretId", "Tencent_SecretKey"]),
     "dnspod-token": ("dns_dp", ["DP_Id", "DP_Key"]),
 }
-MODES = ("tailscale", "mihomo", "both")
-
-
-def services(mode):
-    if mode not in MODES:
-        raise ValueError("mode must be tailscale, mihomo or both")
-    return [
-        s
-        for s in SERVICES
-        if (s == "tailscaled" and mode != "mihomo") or (s != "tailscaled" and mode != "tailscale")
-    ]
 
 
 def load(path):
@@ -47,7 +36,16 @@ def load(path):
         r"(?:ssh-|ecdsa-|sk-)[^\s]+ [A-Za-z0-9+/=]+(?: [^\n]*)?", c["authorized_key"]
     ):
         raise ValueError("An OpenSSH public key is required")
-    if c["mode"] != "tailscale":
+    plan = Capabilities.from_config(c)
+    if plan.mihomo:
+        from vps_ops.identity import validate_device
+
+        first = c.get("device")
+        if not isinstance(first, dict):
+            raise ValueError(
+                "The first device name and platform are required; use deploy configure"
+            )
+        validate_device(first.get("name"), first.get("platform"))
         ipaddress.IPv4Address(c["public_ipv4"])
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]+", c["domain"]):
             raise ValueError("Invalid subscription domain")
@@ -65,5 +63,23 @@ def load(path):
     if c.get("identity"):
         c["identity"] = str(Path(c["identity"]).expanduser().resolve())
     c["work"] = "/var/lib/vps-ops/deploy"
-    c["services"] = services(c["mode"])
+    c["features"] = {"fingerprint": plan.fingerprint, "rtt": plan.rtt}
+    c["plan"] = plan.installation()
+    c["services"] = plan.services
     return c
+
+
+def preview(c):
+    plan = Capabilities.from_config(c)
+    return {
+        "name": c["name"],
+        "target": c["target"],
+        "mode": plan.mode,
+        "fingerprint": plan.fingerprint,
+        "rtt": plan.rtt,
+        "wireguard": plan.wireguard,
+        "services": plan.services,
+        "ports": plan.ports,
+        "tailscale": plan.tailscale,
+        "mihomo": plan.mihomo,
+    }

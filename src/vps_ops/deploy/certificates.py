@@ -6,8 +6,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from vps_ops.files import save
+
 from .components import command
-from .render import save
 
 
 def configure(c, work):
