@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -141,7 +142,11 @@ def _checks(c, section):
         for protocol in ("vless", "hysteria2", "anytls"):
             check(protocol + " 入口认证", lambda protocol=protocol: frontend(c, protocol))
     if section in ("all", "subscription"):
-        files = list(Path(c["subscription_root"]).glob("*.yaml"))
+        files = [
+            p
+            for p in Path(c["subscription_root"]).glob("*.yaml")
+            if re.fullmatch(r"[A-Za-z0-9_-]{43}\\.yaml", p.name)
+        ]
         if not files:
             check("订阅", lambda: (_ for _ in ()).throw(RuntimeError("订阅文件不存在")))
         for i, p in enumerate(files):
@@ -153,6 +158,22 @@ def _checks(c, section):
                     f"https://{host}:{port}/s/{f.name}", resolve=f"{host}:{port}:127.0.0.1"
                 ),
             )
+        auto = Path("/etc/vps-ops/subscriptions.json")
+        if auto.exists():
+            url = json.loads(auto.read_text()).get("auto")
+            if url:
+                for role, agent in (
+                    ("Apple", "clash.meta/1.19 Clash/v1 Darwin/25.0 iPhone18,2"),
+                    ("WIN", "clash-verge/v2.5.10"),
+                ):
+                    check(
+                        "自动订阅 " + role,
+                        lambda u=url, a=agent: curl(
+                            u,
+                            resolve=f"{host}:{port}:127.0.0.1",
+                            user_agent=a,
+                        ),
+                    )
     if section in ("all", "certificate"):
 
         def cert():
