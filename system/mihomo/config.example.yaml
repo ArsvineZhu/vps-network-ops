@@ -48,14 +48,14 @@ listeners:
       windows-test: REPLACE_WITH_WINDOWS_ANYTLS_PASSWORD
       ios-test: REPLACE_WITH_IOS_ANYTLS_PASSWORD
 proxies:
-  - name: TCPFP-Windows
+  - name: win
     type: socks5
     server: 10.203.1.2
     port: 1080
     username: windows
     password: REPLACE_WITH_WINDOWS_BACKEND_PASSWORD
     udp: false
-  - name: TCPFP-iOS
+  - name: Apple
     type: socks5
     server: 10.203.2.2
     port: 1080
@@ -83,7 +83,7 @@ rules:
   - IP-CIDR,240.0.0.0/4,REJECT
   - IP-CIDR6,::/0,REJECT
   - AND,((IN-USER,windows-test),(NETWORK,UDP)),DIRECT
-  - IN-USER,windows-test,TCPFP-Windows
+  - IN-USER,windows-test,win
   - AND,((IN-USER,ios-test),(NETWORK,UDP)),DIRECT
-  - IN-USER,ios-test,TCPFP-iOS
+  - IN-USER,ios-test,Apple
   - MATCH,DIRECT
