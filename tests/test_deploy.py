@@ -109,7 +109,7 @@ def test_diagnostics_redact_subscription_paths_and_known_credentials(monkeypatch
     config = tmp_path / "frontend.yaml"
     config.write_text("password: sample-credential\n")
     token = "x" * 43
-    record = f"caddy request /s/{token}.yaml password=sample-credential status=200\n"
+    record = f"caddy request /s/auto/{token}.yaml password=sample-credential status=200\n"
     process = SimpleNamespace(stdout=io.StringIO(record), wait=lambda: 0, poll=lambda: 0)
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: process)
     filtered_logs(["journalctl"], {"frontend_config": str(config)})
