@@ -74,7 +74,18 @@ def test_member_generation_uses_a_distinct_identity(tmp_path):
         output = tmp_path / name
         policy = Path(__file__).parents[1] / "system/subscriptions/rules.yaml"
         result = subprocess.run(
-            [sys.executable, "-m", "vps_ops.new_member", source, name, output, "--target", "win", "--policy", policy],
+            [
+                sys.executable,
+                "-m",
+                "vps_ops.new_member",
+                source,
+                name,
+                output,
+                "--target",
+                "win",
+                "--policy",
+                policy,
+            ],
             capture_output=True,
             text=True,
         )
