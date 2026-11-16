@@ -15,7 +15,9 @@ import yaml
 from .subscription_policy import configure
 
 
-def generate(d):
+def generate(d, *, target=None):
+    if target not in (None, "win", "Apple"):
+        raise ValueError("target must be win or Apple")
     required = {"server", "port", "uuid", "servername", "public_key", "short_id"}
     if not isinstance(d, dict) or not required <= d.keys():
         raise ValueError("missing required descriptor fields")
@@ -51,7 +53,7 @@ def generate(d):
     sid = d["short_id"]
     if not isinstance(sid, str) or not re.fullmatch(r"(?:[0-9a-fA-F]{2}){0,8}", sid):
         raise ValueError("short_id must be even-length hex, at most 16 digits")
-    name = d.get("name", "Private-VPS")
+    name = f"{target} · VLESS" if target else d.get("name", "node")
     if (
         not isinstance(name, str)
         or not name.strip()
@@ -61,7 +63,7 @@ def generate(d):
         or name in {"DIRECT", "REJECT", "GLOBAL", "VPS-Select"}
     ):
         raise ValueError("invalid node name")
-    fp = d.get("fingerprint", "chrome")
+    fp = d.get("fingerprint", "ios" if target == "Apple" else "chrome")
     if fp not in {"chrome", "firefox", "safari", "ios", "android", "edge", "random"}:
         raise ValueError("unsupported fingerprint")
     node = {
@@ -78,6 +80,18 @@ def generate(d):
         "client-fingerprint": fp,
         "reality-opts": {"public-key": key, "short-id": sid},
     }
+    tun = {"enable": True}
+    if target != "Apple":
+        tun.update(
+            {
+                "stack": "mips",
+                "auto-route": True,
+                "auto-detect-interface": True,
+                "strict-route": True,
+                "dns-mode": "hijack",
+                "dns-hijack": ["any:53", "tcp://any:53"],
+            }
+        )
     return {
         "mixed-port": 7897,
         "allow-lan": False,
@@ -85,10 +99,18 @@ def generate(d):
         "mode": "rule",
         "log-level": "warning",
         "ipv6": False,
-        "tun": {"enable": False},
+        "tun": tun,
+        "dns": {
+            "enable": True,
+            "ipv6": False,
+            "enhanced-mode": "fake-ip",
+            "fake-ip-filter": ["+.lan", "+.local"],
+            "nameserver": ["https://1.1.1.1/dns-query#节点"],
+            "proxy-server-nameserver": ["https://1.1.1.1/dns-query"],
+        },
         "proxies": [node],
-        "proxy-groups": [{"name": "VPS-Select", "type": "select", "proxies": [name]}],
-        "rules": ["MATCH,VPS-Select"],
+        "proxy-groups": [{"name": "节点", "type": "select", "proxies": [name], "default-selected": name}],
+        "rules": ["MATCH,节点"],
     }
 
 
@@ -107,11 +129,14 @@ def main():
         default="profile",
         help="profile 为完整配置，provider 为节点提供者文件",
     )
+    p.add_argument(
+        "--target", choices=["win", "Apple"], help="设备目标；使用对应身份名称和客户端配置"
+    )
     a = p.parse_args()
     if a.kind == "profile" and not a.policy:
         p.error("生成完整配置需要 --policy")
     try:
-        profile = generate(json.loads(a.descriptor.read_text(encoding="utf-8-sig")))
+        profile = generate(json.loads(a.descriptor.read_text(encoding="utf-8-sig")), target=a.target)
         if a.kind == "provider":
             profile = {"proxies": profile["proxies"]}
         else:
