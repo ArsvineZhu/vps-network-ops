@@ -60,7 +60,7 @@ def generate(d, *, target=None):
         or len(name) > 80
         or any(ord(c) < 32 for c in name)
         or name.startswith("Route-")
-        or name in {"DIRECT", "REJECT", "GLOBAL", "VPS-Select"}
+        or name in {"DIRECT", "REJECT", "GLOBAL", "节点"}
     ):
         raise ValueError("invalid node name")
     fp = d.get("fingerprint", "ios" if target == "Apple" else "chrome")
@@ -98,6 +98,7 @@ def generate(d, *, target=None):
         "bind-address": "127.0.0.1",
         "mode": "rule",
         "log-level": "warning",
+        "profile": {"store-selected": False},
         "ipv6": False,
         "tun": tun,
         "dns": {
@@ -136,7 +137,9 @@ def main():
     if a.kind == "profile" and not a.policy:
         p.error("生成完整配置需要 --policy")
     try:
-        profile = generate(json.loads(a.descriptor.read_text(encoding="utf-8-sig")), target=a.target)
+        profile = generate(
+            json.loads(a.descriptor.read_text(encoding="utf-8-sig")), target=a.target
+        )
         if a.kind == "provider":
             profile = {"proxies": profile["proxies"]}
         else:
