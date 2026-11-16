@@ -145,11 +145,7 @@ def render(c, assets):
         profile["proxy-groups"][0]["proxies"] = [n["name"] for n in profile["proxies"]]
         profile = configure(profile, policy)
         profiles[target] = profile
-        root = Path("/srv/vps-subscriptions")
-        path = root / (user["token"] + ".yaml")
-        write_profile(path, profile)
-        os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
-        path.chmod(0o640)
+    root = Path("/srv/vps-subscriptions")
     for target in (None, "Windows", "Apple"):
         profile = copy.deepcopy(profiles[target or "Apple"])
         profile["proxies"] = profiles["Windows"]["proxies"] + profiles["Apple"]["proxies"]
@@ -157,10 +153,15 @@ def render(c, assets):
         primary["proxies"] = [n["name"] for n in profile["proxies"]]
         primary["default-selected"] = (target or "Windows") + " · VLESS"
         name = state["auto_token"] + ("." + target if target else "") + ".yaml"
-        path = root / name
-        write_profile(path, profile)
-        os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
-        path.chmod(0o640)
+        names = [name]
+        if target:
+            role = "windows" if target == "Windows" else "ios"
+            names.append(state["roles"][role]["token"] + ".yaml")
+        for name in names:
+            path = root / name
+            write_profile(path, profile)
+            os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
+            path.chmod(0o640)
     save(
         "/etc/vps-ops/subscriptions.json",
         {"auto": "https://" + c["domain"] + ":9443/s/auto/" + state["auto_token"] + ".yaml"},

@@ -54,6 +54,10 @@ def test_generated_profiles_have_all_identities_and_correct_defaults(node, monke
     for target in ("", "Windows", "Apple"):
         expected = root / (identity["auto_token"] + ("." + target if target else "") + ".yaml")
         response = expected.read_text()
+        if target:
+            role = "windows" if target == "Windows" else "ios"
+            legacy = root / (identity["roles"][role]["token"] + ".yaml")
+            assert yaml.safe_load(legacy.read_text()) == yaml.safe_load(response)
         monkeypatch.setattr(
             "vps_ops.probes.curl", lambda *args, response=response, **kwargs: response
         )

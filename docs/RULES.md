@@ -12,7 +12,7 @@
 
 Clash Verge Rev 的通用 UA `clash-verge/v...` 用作当前 Windows 客户端的默认提示；若在 macOS 上使用相同 UA，可设置带 `Darwin` 的订阅下载 UA，或手动选择 Apple 节点。User-Agent 只影响默认项；订阅令牌授权读取两套身份的凭据。不同订阅持有者应使用独立令牌和独立认证身份。离线 `member create` 仍只生成待注册的单身份材料，注册、发布及双身份分配由服务器管理者完成。
 
-统一 URL 使用 `/s/auto/<令牌>.yaml`。设备变体 `.Windows.yaml`、`.Apple.yaml` 只在服务器内部使用。响应设置 `Cache-Control: no-store` 与 `Vary: User-Agent`。原有设备专用链接继续提供单身份配置。
+统一 URL 使用 `/s/auto/<令牌>.yaml`。设备变体 `.Windows.yaml`、`.Apple.yaml` 只在服务器内部使用。响应设置 `Cache-Control: no-store` 与 `Vary: User-Agent`。原有链接继续可用，也包含两套身份，其默认节点按原设备身份设置；设备自动识别使用统一地址。
 
 `GLOBAL` 组把 `Nodes` 放在第一项。客户端可能保留上次手动选择；更新订阅后应核对 `Nodes` 的实际选中项，生成配置中的默认值不强制覆盖客户端保存的选择。
 
