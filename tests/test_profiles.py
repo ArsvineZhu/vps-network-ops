@@ -3,7 +3,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from vps_ops import clash_profile
+import yaml
+
+from vps_ops import clash_profile, subscription_policy
 
 
 def test_profile_routes_through_the_node():
@@ -41,6 +43,16 @@ def test_target_controls_identity_and_client_tun():
     assert win["tun"]["strict-route"] is True
     assert apple["tun"] == {"enable": True}
     assert apple["proxy-groups"][0]["default-selected"] == "Apple · VLESS"
+    assert apple["profile"]["store-selected"] is False
+
+    policy = yaml.safe_load(
+        (Path(__file__).parents[1] / "system/subscriptions/rules.yaml").read_text()
+    )
+    complete = subscription_policy.configure(apple, policy)
+    names = [node["name"] for node in complete["proxies"]]
+    names += [group["name"] for group in complete["proxy-groups"]]
+    assert len(names) == len(set(names))
+    assert complete["proxy-groups"][1]["name"] == "GLOBAL"
 
 
 def test_member_generation_uses_a_distinct_identity(tmp_path):
