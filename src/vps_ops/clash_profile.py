@@ -98,7 +98,6 @@ def generate(d, *, target=None):
         "bind-address": "127.0.0.1",
         "mode": "rule",
         "log-level": "warning",
-        "profile": {"store-selected": False},
         "ipv6": False,
         "tun": tun,
         "dns": {
