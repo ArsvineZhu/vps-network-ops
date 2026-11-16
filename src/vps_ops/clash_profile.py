@@ -16,8 +16,8 @@ from .subscription_policy import configure
 
 
 def generate(d, *, target=None):
-    if target not in (None, "win", "Apple"):
-        raise ValueError("target must be win or Apple")
+    if target not in (None, "WIN", "Apple"):
+        raise ValueError("target must be WIN or Apple")
     required = {"server", "port", "uuid", "servername", "public_key", "short_id"}
     if not isinstance(d, dict) or not required <= d.keys():
         raise ValueError("missing required descriptor fields")
@@ -81,7 +81,7 @@ def generate(d, *, target=None):
         "reality-opts": {"public-key": key, "short-id": sid},
     }
     tun = {"enable": True}
-    if target == "win":
+    if target == "WIN":
         tun.update(
             {
                 "stack": "mips",
@@ -131,16 +131,11 @@ def main():
         default="profile",
         help="profile 为完整配置，provider 为节点提供者文件",
     )
-    p.add_argument(
-        "--target", choices=["win", "Apple"], help="设备目标；使用对应身份名称和客户端配置"
-    )
     a = p.parse_args()
     if a.kind == "profile" and not a.policy:
         p.error("生成完整配置需要 --policy")
     try:
-        profile = generate(
-            json.loads(a.descriptor.read_text(encoding="utf-8-sig")), target=a.target
-        )
+        profile = generate(json.loads(a.descriptor.read_text(encoding="utf-8-sig")))
         if a.kind == "provider":
             profile = {"proxies": profile["proxies"]}
         else:
