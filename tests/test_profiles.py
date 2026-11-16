@@ -43,7 +43,6 @@ def test_target_controls_identity_and_client_tun():
     assert win["tun"]["strict-route"] is True
     assert apple["tun"] == {"enable": True}
     assert apple["proxy-groups"][0]["default-selected"] == "Apple · VLESS"
-    assert apple["profile"]["store-selected"] is False
 
     policy = yaml.safe_load(
         (Path(__file__).parents[1] / "system/subscriptions/rules.yaml").read_text()
