@@ -13,8 +13,8 @@ from vps_ops import subscription_policy
 def profile():
     return {
         "proxies": [{"name": "VPS", "type": "vless", "uuid": "private-test-value"}],
-        "proxy-groups": [{"name": "VPS-Select", "type": "select", "proxies": ["VPS"]}],
-        "rules": ["MATCH,VPS-Select"],
+        "proxy-groups": [{"name": "节点", "type": "select", "proxies": ["VPS"]}],
+        "rules": ["MATCH,节点"],
     }
 
 
@@ -33,6 +33,8 @@ def test_configured_policy_is_shared_without_changing_nodes():
     assert original == saved
     assert result["proxies"] == saved["proxies"]
     assert result["proxy-groups"][0] == saved["proxy-groups"][0]
+    assert result["proxy-groups"][1]["name"] == "GLOBAL"
+    assert result["proxy-groups"][1]["default-selected"] == "节点"
     assert result["rule-providers"]["google-ai"]["url"].startswith(
         "https://rules.example.test:9443/rules/"
     )
