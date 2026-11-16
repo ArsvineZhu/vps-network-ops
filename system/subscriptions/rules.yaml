@@ -43,7 +43,6 @@ proxy-groups:
   - name: GLOBAL
     type: select
     proxies: [节点, DIRECT]
-    default-selected: 节点
   - { name: GitHub, type: select, proxies: [节点, DIRECT] }
   - { name: YouTube, type: select, proxies: [节点, DIRECT] }
   - { name: Google, type: select, proxies: [节点, DIRECT] }
