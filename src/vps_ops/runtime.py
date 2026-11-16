@@ -106,7 +106,7 @@ def filtered_logs(args, c, *, machine=False):
                 value = value.replace(secret, "[隐藏]")
                 value = value.replace(json.dumps(secret, ensure_ascii=False)[1:-1], "[隐藏]")
         value = re.sub(r"https?://[^\s\"']+", "[URL隐藏]", value)
-        return re.sub(r"/s/[A-Za-z0-9_-]{43}[.]yaml", "/s/[隐藏].yaml", value)
+        return re.sub(r"/s/(?:auto/)?[A-Za-z0-9_-]{43}[.]yaml", "/s/[隐藏].yaml", value)
 
     def redact_tree(value):
         if isinstance(value, dict):
