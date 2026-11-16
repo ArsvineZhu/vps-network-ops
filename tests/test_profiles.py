@@ -74,7 +74,7 @@ def test_member_generation_uses_a_distinct_identity(tmp_path):
         output = tmp_path / name
         policy = Path(__file__).parents[1] / "system/subscriptions/rules.yaml"
         result = subprocess.run(
-            [sys.executable, "-m", "vps_ops.new_member", source, name, output, "--policy", policy],
+            [sys.executable, "-m", "vps_ops.new_member", source, name, output, "--target", "win", "--policy", policy],
             capture_output=True,
             text=True,
         )
@@ -82,6 +82,7 @@ def test_member_generation_uses_a_distinct_identity(tmp_path):
         client = json.loads((output / "profile.yaml").read_text(encoding="utf-8"))
         server = json.loads((output / "server-user.pending.json").read_text(encoding="utf-8"))
         assert client["proxies"][0]["uuid"] == server["uuid"]
+        assert client["proxies"][0]["name"] == "win · VLESS"
         assert server["uuid"] not in result.stdout
         identities.append(server["uuid"])
     assert identities[0] != identities[1]
