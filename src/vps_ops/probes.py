@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from .runtime import curl
+from .runtime import curl, published_subscription
 
 
 def subscription(c, url, expected, *, user_agent=None, target=None):
@@ -66,9 +66,8 @@ def subscription(c, url, expected, *, user_agent=None, target=None):
 
 
 def frontend(c, protocol, target=None):
-    nodes = []
-    for path in Path(c["subscription_root"]).glob("*.yaml"):
-        nodes.extend(yaml.safe_load(path.read_text()).get("proxies", []))
+    _, profiles = published_subscription(c)
+    nodes = yaml.safe_load(profiles[target or ""].read_text())["proxies"]
     node = next(
         (
             n

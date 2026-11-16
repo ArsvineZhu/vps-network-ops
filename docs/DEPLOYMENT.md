@@ -75,7 +75,7 @@ DNS-01 通过临时 TXT 记录验证域名控制权，单独测试签发无需�
 
 apply 经原生 SSH 传输部署包，服务器本地 Ansible 安装和配置系统。部署会验证管理公钥、更新软件、按需重启，再连接并继续。首次密码登录切换到公钥和重启恢复时需要重新认证，其余任务复用连接。重装后如主机密钥发生变化，先从供应商控制台核对指纹，不跳过验证。
 
-安装代理时自动生成 `Windows` 和 `Apple` 两组设备身份及独立密码，同时生成一个可在所有已授权设备上使用的随机订阅地址。统一订阅始终提供两套身份的 VLESS、Hysteria2、AnyTLS 共六个节点。Caddy 根据更新请求的 User-Agent 调整默认节点及设备 TUN 设置；无法识别时仍返回全部节点，初始默认 Windows，可手动切换。所有配置均使用 DNS-over-HTTPS。Windows 由 Mihomo 自动路由；iOS 由 Clash 的 Network Extension 接管 VPN。原设备专用订阅链接保留可用；统一链接会显示在 `deploy show subscriptions` 中。身份保存在 /etc/vps-ops/identity.json，重复执行相同配置时复用。证书申请需要 DNS API 有效权限；凭据由 acme.sh 保存用于续期；剩余有效期不足 7 天时，重复部署会触发续期。失败后修正原因，再执行同一条 apply，不删除身份和证书文件。
+安装代理时自动生成 `Windows` 和 `Apple` 两组设备身份及独立密码，同时生成一个可在所有已授权设备上使用的随机订阅地址。统一订阅始终提供两套身份的 VLESS、Hysteria2、AnyTLS 共六个节点。Caddy 根据更新请求的 User-Agent 调整默认节点及设备 TUN 设置；无法识别时仍返回全部节点，初始默认 Windows，可手动切换。所有配置均使用 DNS-over-HTTPS。Windows 由 Mihomo 自动路由；iOS 由 Clash 的 Network Extension 接管 VPN。统一链接通过 `deploy show subscriptions` 查看。身份保存在 /etc/vps-ops/identity.json，重复执行相同配置时复用。证书申请需要 DNS API 有效权限；凭据由 acme.sh 保存用于续期；剩余有效期不足 7 天时，重复部署会触发续期。失败后修正原因，再执行同一条 apply，不删除身份和证书文件。
 
 Tailscale 会给出网页登录地址，等待最多 15 分钟；登录后还需在控制台批准出口能力，再在设备端选择出口。超时可再次 apply 继续。
 

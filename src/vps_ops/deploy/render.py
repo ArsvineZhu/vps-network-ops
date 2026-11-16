@@ -63,21 +63,17 @@ def render(c, assets):
                 )
             ),
             "short": secrets.token_hex(8),
+            "auto_token": secrets.token_urlsafe(32),
             "roles": {
                 r: {
                     "uuid": str(uuid.uuid4()),
                     "hy": secrets.token_urlsafe(32),
                     "tls": secrets.token_urlsafe(32),
                     "socks": secrets.token_urlsafe(32),
-                    "token": secrets.token_urlsafe(32),
                 }
                 for r in ("windows", "ios")
             },
         }
-        save(identity, state)
-
-    if not state.get("auto_token"):
-        state["auto_token"] = secrets.token_urlsafe(32)
         save(identity, state)
 
     def text(name):
@@ -153,15 +149,10 @@ def render(c, assets):
         primary["proxies"] = [n["name"] for n in profile["proxies"]]
         primary["default-selected"] = (target or "Windows") + " · VLESS"
         name = state["auto_token"] + ("." + target if target else "") + ".yaml"
-        names = [name]
-        if target:
-            role = "windows" if target == "Windows" else "ios"
-            names.append(state["roles"][role]["token"] + ".yaml")
-        for name in names:
-            path = root / name
-            write_profile(path, profile)
-            os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
-            path.chmod(0o640)
+        path = root / name
+        write_profile(path, profile)
+        os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
+        path.chmod(0o640)
     save(
         "/etc/vps-ops/subscriptions.json",
         {"auto": "https://" + c["domain"] + ":9443/s/auto/" + state["auto_token"] + ".yaml"},

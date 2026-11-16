@@ -54,10 +54,6 @@ def test_generated_profiles_have_all_identities_and_correct_defaults(node, monke
     for target in ("", "Windows", "Apple"):
         expected = root / (identity["auto_token"] + ("." + target if target else "") + ".yaml")
         response = expected.read_text()
-        if target:
-            role = "windows" if target == "Windows" else "ios"
-            legacy = root / (identity["roles"][role]["token"] + ".yaml")
-            assert yaml.safe_load(legacy.read_text()) == yaml.safe_load(response)
         monkeypatch.setattr(
             "vps_ops.probes.curl", lambda *args, response=response, **kwargs: response
         )
@@ -143,6 +139,9 @@ def test_caddy_delivers_all_identities_with_platform_defaults(node, tmp_path):
                             assert yaml.safe_load(data) == yaml.safe_load(expected.read_text())
                         else:
                             assert not data
+            with pytest.raises(HTTPError) as removed:
+                opener.open(base.replace("/s/auto/", "/s/") + ".yaml", timeout=5)
+            assert removed.value.code == 404
             for suffix, method in (
                 (".Apple.yaml", "GET"),
                 (".Windows.yaml", "GET"),

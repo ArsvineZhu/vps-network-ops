@@ -1,9 +1,8 @@
 import json
-import re
 import subprocess
 from pathlib import Path
 
-from .runtime import curl, run
+from .runtime import curl, published_subscription, run
 
 
 class CheckWarning(Exception):
@@ -148,49 +147,19 @@ def _checks(c, section):
     if section in ("all", "subscription"):
         from .probes import subscription
 
-        host = c["subscription_host"]
-        port = c["subscription_port"]
-        files = [
-            p
-            for p in Path(c["subscription_root"]).glob("*.yaml")
-            if re.fullmatch(r"[A-Za-z0-9_-]{43}[.]yaml", p.name)
-        ]
-        if not files:
+        def delivery(role, agent):
+            url, files = published_subscription(c)
+            return subscription(c, url, files[role], user_agent=agent, target=role)
+
+        for role, agent in (
+            ("Apple", "clash.meta/1.19 Clash/v1 Darwin/25.0 iPhone18,2"),
+            ("Windows", "clash-verge/v2.5.10"),
+            ("", "curl/8.11.0"),
+        ):
             check(
-                "Subscription",
-                lambda: (_ for _ in ()).throw(RuntimeError("Subscription files do not exist")),
+                "Subscription " + (role or "Unknown platform"),
+                lambda role=role, agent=agent: delivery(role, agent),
             )
-        for i, p in enumerate(files):
-            check(
-                f"Subscription {i + 1}",
-                lambda f=p, host=host, port=port: subscription(
-                    c, f"https://{host}:{port}/s/{f.name}", f
-                ),
-            )
-        auto = Path("/etc/vps-ops/subscriptions.json")
-        if auto.exists():
-            url = json.loads(auto.read_text()).get("auto")
-            if url:
-                for role, agent in (
-                    ("Apple", "clash.meta/1.19 Clash/v1 Darwin/25.0 iPhone18,2"),
-                    ("Windows", "clash-verge/v2.5.10"),
-                    ("", "curl/8.11.0"),
-                ):
-                    check(
-                        "Automatic subscription " + (role or "Unknown platform"),
-                        lambda u=url, a=agent, r=role: subscription(
-                            c,
-                            u,
-                            Path(c["subscription_root"])
-                            / (
-                                u.rsplit("/", 1)[-1].removesuffix(".yaml")
-                                + ("." + r if r else "")
-                                + ".yaml"
-                            ),
-                            user_agent=a,
-                            target=r,
-                        ),
-                    )
     if section in ("all", "certificate"):
 
         def cert():

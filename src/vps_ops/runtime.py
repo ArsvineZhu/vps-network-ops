@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -44,6 +45,17 @@ def config(path):
         if "services" not in (yaml.safe_load(Path(path).read_text()) or {}):
             result["services"] = selected
     return result
+
+
+def published_subscription(c):
+    url = json.loads(Path("/etc/vps-ops/subscriptions.json").read_text())["auto"]
+    token = url.rsplit("/", 1)[-1].removesuffix(".yaml")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+        raise RuntimeError("Invalid subscription index")
+    return url, {
+        target: Path(c["subscription_root"]) / (token + ("." + target if target else "") + ".yaml")
+        for target in ("", "Windows", "Apple")
+    }
 
 
 def resolver():
