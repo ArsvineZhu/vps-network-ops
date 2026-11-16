@@ -28,6 +28,16 @@ TCP 代理分别终止设备端和服务器端连接。服务器读取 `TCP_INFO
 
 以 `tc netem` 延迟 ACK/握手可以在隔离实验中影响 TCP RTT 估计，但也会影响真实发送窗口、拥塞控制和请求完成时间。普通追加网络延迟会同时加大服务器与浏览器所测时延，不能稳定消除差值，不应直接部署到用户出站。客户端开启 Mihomo TUN 仅改变流量捕获，不会使 VLESS/AnyTLS 的 TCP 重新建连变成端到端 TCP。
 
+### 远端 TCP RTT 的真实采样机制
+
+在 Linux `tcp_input.c` 中，`tcp_synack_rtt_meas()` 可以用 SYN-ACK 发出到最终握手 ACK 到达的时间建立初始 RTT；后续 `tcp_ack_update_rtt()` 则优先使用基于序列号的 ACK 时序样本，只有缺少该样本时才使用 `TSecr`。所以简单修改 TCP Timestamp 的 `TSecr`，不能在通常的数据往返中稳定改写远端的 `TCP_INFO.tcpi_rtt`。这也是只修改 SYN 选项的当前 eBPF 程序不会改变 RTT 的直接原因。
+
+如果只在 egress 将第三次握手 ACK 延迟，探针可能暂时读到更大的初始 RTT，但 HTTP/2 持久连接上的后续数据 ACK 会更新平滑 RTT。若持续延迟与数据确认有关的 ACK，会抬高发送端看到的 RTT，同时扰动其拥塞窗口、重传定时器与传输速度；不能保证浏览器侧的延迟保持不变。实验应分别记录 `tcpi_rtt`、`tcpi_min_rtt`、`tcpi_rttvar`、重传与浏览器端耗时，并复用 HTTP/2 连接。
+
+### 其他指纹维度
+
+现有 SYN 重排只覆盖特定布局的 IPv4 SYN。除初始 TTL、MSS、SACK、窗口比例及选项顺序，检测系统还可能分析 DF/ECN、IPID、时间戳时钟增长、重传时序、拥塞控制行为、浏览器 TLS/HTTP2 指纹以及 UDP/QUIC 出口的一致性。把某一项伪装为 Apple 不会自动让整条 TCP 连接模拟 Darwin/XNU 内核。应以被动观测和性能基线检查这些特征，避免为追求单站评分修改已经工作的内核协商值。
+
 ### 建议对照实验
 
 1. 在同一客户端、网络和网站上分别测试 VLESS、Hysteria2、AnyTLS，记录多次浏览器时间、网站 TCP RTT、HTTP 版本及服务器端连接状态，避免单次测量偏差。
