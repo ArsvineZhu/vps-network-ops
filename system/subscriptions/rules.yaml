@@ -1,6 +1,6 @@
 # 服务端订阅地址；将域名改为自己的订阅域名。
 base-url: https://subscription.example.com:9443
-node-group: VPS-Select
+node-group: 节点
 variables:
   server_ipv4: 203.0.113.1
   ssh_port: 23899
@@ -40,17 +40,21 @@ defaults:
     proxy: DIRECT
 
 proxy-groups:
-  - { name: GitHub, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: YouTube, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Google, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Telegram, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Netflix, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Disney, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Spotify, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Bilibili, type: select, proxies: [DIRECT, VPS-Select] }
-  - { name: China, type: select, proxies: [DIRECT, VPS-Select] }
-  - { name: Private, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: OpenAI, type: select, proxies: [VPS-Select, DIRECT] }
+  - name: GLOBAL
+    type: select
+    proxies: [节点, DIRECT]
+    default-selected: 节点
+  - { name: GitHub, type: select, proxies: [节点, DIRECT] }
+  - { name: YouTube, type: select, proxies: [节点, DIRECT] }
+  - { name: Google, type: select, proxies: [节点, DIRECT] }
+  - { name: Telegram, type: select, proxies: [节点, DIRECT] }
+  - { name: Netflix, type: select, proxies: [节点, DIRECT] }
+  - { name: Disney, type: select, proxies: [节点, DIRECT] }
+  - { name: Spotify, type: select, proxies: [节点, DIRECT] }
+  - { name: Bilibili, type: select, proxies: [DIRECT, 节点] }
+  - { name: China, type: select, proxies: [DIRECT, 节点] }
+  - { name: Private, type: select, proxies: [节点, DIRECT] }
+  - { name: OpenAI, type: select, proxies: [节点, DIRECT] }
   - name: Anthropic-直连（仅 TCP）
     type: select
     proxies: [DIRECT]
@@ -58,19 +62,19 @@ proxy-groups:
     hidden: true
   - name: Anthropic
     type: select
-    proxies: [REJECT, VPS-Select, Anthropic-直连（仅 TCP）]
+    proxies: [REJECT, 节点, Anthropic-直连（仅 TCP）]
     default-selected: REJECT
-  - { name: Google AI, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Grok, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: AI-Coding, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: AI-Other, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Steam, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: 游戏, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: 游戏下载, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: 开发, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Apple, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Microsoft, type: select, proxies: [VPS-Select, DIRECT] }
-  - { name: Linux, type: select, proxies: [VPS-Select, DIRECT] }
+  - { name: Google AI, type: select, proxies: [节点, DIRECT] }
+  - { name: Grok, type: select, proxies: [节点, DIRECT] }
+  - { name: AI-Coding, type: select, proxies: [节点, DIRECT] }
+  - { name: AI-Other, type: select, proxies: [节点, DIRECT] }
+  - { name: Steam, type: select, proxies: [节点, DIRECT] }
+  - { name: 游戏, type: select, proxies: [节点, DIRECT] }
+  - { name: 游戏下载, type: select, proxies: [节点, DIRECT] }
+  - { name: 开发, type: select, proxies: [节点, DIRECT] }
+  - { name: Apple, type: select, proxies: [节点, DIRECT] }
+  - { name: Microsoft, type: select, proxies: [节点, DIRECT] }
+  - { name: Linux, type: select, proxies: [节点, DIRECT] }
 
 rule-providers:
   # 少量本地规则可在这里维护；其余内容由上游规则集更新。
@@ -280,7 +284,7 @@ rules:
   - "AND,((NETWORK,TCP),(RULE-SET,openai-custom)),OpenAI"
   - "RULE-SET,ads,REJECT"
   - "RULE-SET,anthropic,Anthropic"
-  - "NETWORK,udp,VPS-Select"
+  - "NETWORK,udp,节点"
   - "NETWORK,udp,REJECT"
   - "RULE-SET,openai,OpenAI"
   - "RULE-SET,google-ai,Google AI"
@@ -313,8 +317,8 @@ rules:
   - "RULE-SET,linux-archlinux,Linux"
   - "RULE-SET,linux-fedora,Linux"
   - "RULE-SET,private,Private"
-  - "RULE-SET,loyal-proxy,VPS-Select"
+  - "RULE-SET,loyal-proxy,节点"
   - "RULE-SET,loyal-direct,China"
   - "RULE-SET,cn,China"
   - "RULE-SET,geoip-cn,China,no-resolve"
-  - "MATCH,VPS-Select"
+  - "MATCH,节点"
