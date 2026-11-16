@@ -2,6 +2,16 @@
 
 服务器通过 HTTPS 同时提供客户端订阅和规则资源。规则资源由 Caddy 转发至 MetaCubeX、VPSDance、ACL4SSR 和 Loyalsoldier；客户端按规则提供者的更新周期获取最新内容。当前策略区分 OpenAI、Anthropic、Google AI、Grok、编程工具、游戏、流媒体、开发服务、国内站点和广告。
 
+## 设备目标与网络接管
+
+部署时为 `win` 和 `Apple` 分别生成订阅；两者使用各自已有的入口认证凭据，对应服务端独立的 TCP 指纹出口。名称用于标识目标，实际路由身份由认证信息决定。每份订阅只包含该身份的 VLESS、Hysteria2 与 AnyTLS 节点，并将 VLESS 设为默认选择。
+
+主选择组为 `节点`，`GLOBAL` 组默认指向它。切换到全局模式时也使用目标身份；客户端先前保存的 GLOBAL 选择仍可能覆盖配置默认值，首次导入或清除旧选择后检查实际生效的节点。
+
+客户端 DNS 默认采用 Fake IP，并通过 `节点` 访问 Cloudflare DoH；代理入口使用固定 IPv4，因此正常连接无需从本地解析节点域名。节点改为域名时，`proxy-server-nameserver` 用于独立引导解析，不等同于普通目标域名的解析出口。
+
+Windows 订阅启用 TUN 自动路由、严格路由和 53 端口 DNS 劫持。Apple 订阅启用 TUN 标志，实际 VPN 接管由 iOS 客户端的 Network Extension 管理。普通 DoH/DoT 应用流量不会被端口 53 劫持自动解密，是否走代理仍要以连接日志核查。
+
 ## 调整规则
 
 `/etc/vps-rules/rules.yaml` 是服务器的规则配置。`base-url` 是订阅服务地址；`variables` 设置服务器 IPv4 和 SSH 端口；`hosts` 指定订阅域名解析；`proxy-groups`、`rule-providers` 和 `rules` 分别决定策略组、规则源和匹配顺序。HTTP 规则使用 `/rules/` 下的服务器地址，`interval` 的单位是秒。
