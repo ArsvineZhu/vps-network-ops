@@ -142,16 +142,16 @@ def _checks(c, section):
         for protocol in ("vless", "hysteria2", "anytls"):
             check(protocol + " 入口认证", lambda protocol=protocol: frontend(c, protocol))
     if section in ("all", "subscription"):
+        host = c["subscription_host"]
+        port = c["subscription_port"]
         files = [
             p
             for p in Path(c["subscription_root"]).glob("*.yaml")
-            if re.fullmatch(r"[A-Za-z0-9_-]{43}\\.yaml", p.name)
+            if re.fullmatch(r"[A-Za-z0-9_-]{43}[.]yaml", p.name)
         ]
         if not files:
             check("订阅", lambda: (_ for _ in ()).throw(RuntimeError("订阅文件不存在")))
         for i, p in enumerate(files):
-            host = c["subscription_host"]
-            port = c["subscription_port"]
             check(
                 f"订阅 {i + 1}",
                 lambda f=p, host=host, port=port: curl(
