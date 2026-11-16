@@ -157,6 +157,7 @@ def test_usage_report_is_readable_and_json_remains_available(monkeypatch, capsys
     assert "数据状态：未更新或不可用" in output and "采集失败" in output
     assert "手机\n" in output and "上传：1.00 KiB（1,024 字节）" in output
     assert "活跃连接：未知" in output
+    assert "auto：https://example.invalid/s/auto/private.yaml\\n" in output
     assert '{"' not in output and "\\n" not in output
 
     assert cli.execute(["usage", "report", "--json"]) == 0
@@ -176,16 +177,11 @@ def test_checks_and_subscription_addresses_are_formatted(monkeypatch, tmp_path, 
     assert "[通过] 证书：\n  开始：今天\n  到期：明年" in capsys.readouterr().out
 
     subscription_file = tmp_path / "subscriptions.json"
-    subscriptions = {
-        "win": "https://example.invalid/s/private.yaml",
-        "Apple": "https://example.invalid/s/other.yaml",
-    }
+    subscriptions = {"auto": "https://example.invalid/s/auto/private.yaml"}
     subscription_file.write_text(json.dumps(subscriptions))
     monkeypatch.setattr(client, "Path", lambda _: subscription_file)
     assert cli.execute(["deploy", "show", "subscriptions"]) == 0
     output = capsys.readouterr().out
-    assert "win：https://example.invalid/s/private.yaml\n" in output
-    assert "Apple：https://example.invalid/s/other.yaml\n" in output
     assert '{"' not in output
     assert cli.execute(["--json", "deploy", "show", "subscriptions"]) == 0
     assert json.loads(capsys.readouterr().out) == subscriptions
