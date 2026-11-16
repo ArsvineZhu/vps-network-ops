@@ -11,24 +11,24 @@ https://REPLACE_WITH_SUBSCRIPTION_DOMAIN:9443 {
 		path_regexp auto_subscription ^/s/auto/([A-Za-z0-9_-]{43})[.]yaml$
 		method GET HEAD
 	}
+	@apple_subscription header_regexp User-Agent "(?i)(darwin|iphone|ipad|macintosh|mac os x|cfnetwork)"
+	@win_subscription header_regexp User-Agent "(?i)(windows|win64|clash-verge/)"
 	handle @auto_subscription {
 		header Cache-Control "no-store"
 		header Referrer-Policy "no-referrer"
 		header Vary "User-Agent"
 		header Profile-Update-Interval "24"
-		@apple header_regexp User-Agent "(?i)(darwin|iphone|ipad|macintosh|mac os x|cfnetwork)"
-		@win header_regexp User-Agent "(?i)(windows|win64|clash-verge/)"
-		route {
-			handle @apple {
-				rewrite * /{re.auto_subscription.1}.Apple.yaml
-				root * /srv/vps-subscriptions
-				file_server
-			}
-			handle @win {
-				rewrite * /{re.auto_subscription.1}.WIN.yaml
-				root * /srv/vps-subscriptions
-				file_server
-			}
+		handle @apple_subscription {
+			rewrite * /{re.auto_subscription.1}.Apple.yaml
+			root * /srv/vps-subscriptions
+			file_server
+		}
+		handle @win_subscription {
+			rewrite * /{re.auto_subscription.1}.WIN.yaml
+			root * /srv/vps-subscriptions
+			file_server
+		}
+		handle {
 			respond "Cannot identify the subscription client's platform" 406
 		}
 	}
