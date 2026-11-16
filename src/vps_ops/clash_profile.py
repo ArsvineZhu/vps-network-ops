@@ -81,7 +81,7 @@ def generate(d, *, target=None):
         "reality-opts": {"public-key": key, "short-id": sid},
     }
     tun = {"enable": True}
-    if target != "Apple":
+    if target == "win":
         tun.update(
             {
                 "stack": "mips",
