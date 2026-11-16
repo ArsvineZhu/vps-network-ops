@@ -56,7 +56,7 @@ def node(tmp_path, monkeypatch, request):
     )
     render.render(config, Path(__file__).parents[1] / "system")
     state = identity.load()
-    identity.add(state, "Second", "Windows")
+    identity.add(state, "Second", "Default")
     save(identity.IDENTITY, state)
     render.render(config, Path(__file__).parents[1] / "system")
     render.render(config, Path(__file__).parents[1] / "system")
@@ -65,7 +65,7 @@ def node(tmp_path, monkeypatch, request):
     assert path("/etc/systemd/system/mihomo.service.d/45-fingerprint.conf").exists() == fingerprint
     assert "tcpfp-" not in path("/etc/systemd/system/mihomo.service.d/50-tls.conf").read_text()
     collector = json.loads(path("/etc/mihomo-observed/collector.json").read_text())
-    assert len(collector["users"]) == 4
+    assert len(collector["users"]) == 6
     return path, state, config
 
 
@@ -92,7 +92,7 @@ def test_device_variants_keep_their_own_credentials_and_correct_defaults(node, m
                 config, device["id"], "https://example.invalid", expected, target=target
             )
             profile = yaml.safe_load(response)
-            assert len(profile["proxies"]) == (8 if deployment["features"]["rtt"] else 6)
+            assert len(profile["proxies"]) == (12 if deployment["features"]["rtt"] else 9)
             variants.append(profile["proxies"])
             wrong = yaml.safe_load(response)
             next(n for n in wrong["proxies"] if n["type"] == "vless")["uuid"] = "wrong-identity"
@@ -112,6 +112,11 @@ def test_device_variants_keep_their_own_credentials_and_correct_defaults(node, m
         assert variants[0] == variants[1] == variants[2]
         credentials.append({p["uuid"] for p in device["profiles"].values()})
     assert credentials[0].isdisjoint(credentials[1])
+    frontend = yaml.safe_load(path("/etc/mihomo/config.yaml").read_text())
+    for device in state["devices"].values():
+        assert "profiles" in device
+        assert "IN-USER," + device["profiles"]["default"]["user"] + ",DIRECT" in frontend["rules"]
+    assert not path("/etc/tcpfp/vps.json").exists()
 
 
 def test_caddy_delivers_private_device_variants_and_revoked_url_is_removed(
@@ -161,9 +166,11 @@ def test_caddy_delivers_private_device_variants_and_revoked_url_is_removed(
                     ("Windows Darwin clash-verge/v2.5.10", "Apple"),
                     ("CFNetwork/1568 Darwin/25", "Apple"),
                     ("Macintosh Intel Mac OS X 13_0", "Apple"),
-                    ("clash-verge/v2.5.10", "Windows"),
+                    ("clash-verge/v2.5.10", ""),
                     ("Windows NT 10.0 Win64", "Windows"),
                     ("curl/8.11.0", ""),
+                    ("Clash Meta Android", ""),
+                    ("Clash Linux x86_64", ""),
                 ):
                     expected = identity.subscription_files(
                         path("/srv/vps-subscriptions"), device["token"]
@@ -250,7 +257,7 @@ def test_revoking_all_devices_removes_public_auth_and_preserves_unowned_files(no
     assert yaml.safe_load(path("/etc/mihomo/config.yaml").read_text())["listeners"] == []
     assert json.loads(path("/etc/mihomo-observed/collector.json").read_text())["users"] == []
     assert (
-        len(json.loads(path("/etc/mihomo-observed/collector.json").read_text())["user_labels"]) == 4
+        len(json.loads(path("/etc/mihomo-observed/collector.json").read_text())["user_labels"]) == 6
     )
     assert json.loads(path("/etc/vps-ops/subscriptions.json").read_text()) == {}
     assert list(path("/srv/vps-subscriptions").glob("*.yaml")) == [untouched]

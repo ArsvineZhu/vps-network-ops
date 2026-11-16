@@ -13,7 +13,7 @@ https://REPLACE_WITH_SUBSCRIPTION_DOMAIN:9443 {
 	}
 	@apple_subscription header_regexp User-Agent "(?i)(darwin|iphone|ipad|macintosh|mac os x|cfnetwork)"
 	@win_subscription {
-		header_regexp User-Agent "(?i)(windows|win64|clash-verge/)"
+		header_regexp User-Agent "(?i)(windows|win64)"
 		not header_regexp User-Agent "(?i)(darwin|iphone|ipad|macintosh|mac os x|cfnetwork)"
 	}
 	handle @device_subscription {

@@ -433,7 +433,7 @@ def render(data, *, view="checks", summary=False):
                 )
             if data.get("wireguard"):
                 parts.append(
-                    "The default WireGuard nodes preserve device-to-server latency. Switch Windows / Apple in Nodes if needed."
+                    "The default WireGuard nodes preserve device-to-server latency. Switch Default / Windows / Apple in Nodes if needed."
                 )
             parts.append("Use status and check for service and connection results.")
         return "\n".join(parts)

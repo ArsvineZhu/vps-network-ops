@@ -7,8 +7,8 @@ import uuid
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
+from .exit_profiles import FINGERPRINTS, PROFILES
 from .files import save
-from .fingerprint_profiles import PROFILES
 from .wireguard import allocate_addresses, key_pair
 
 IDENTITY = Path("/etc/vps-ops/identity.json")
@@ -31,7 +31,7 @@ def validate_device(name, platform):
     ):
         raise ValueError("Device name must contain 1 to 64 visible characters without slashes")
     if platform not in {profile.label for profile in PROFILES}:
-        raise ValueError("Select Windows or Apple as the device's default platform")
+        raise ValueError("Select Default, Windows or Apple as the device's default profile")
 
 
 def create():
@@ -42,7 +42,7 @@ def create():
             for key, value in reality.items()
         }
         | {"short": secrets.token_hex(8)},
-        "backends": {profile.key: secrets.token_urlsafe(32) for profile in PROFILES},
+        "backends": {profile.key: secrets.token_urlsafe(32) for profile in FINGERPRINTS},
         "wireguard": {"server": key_pair(), "next_peer": 2},
         "devices": {},
     }
@@ -69,13 +69,7 @@ def add(state, name, platform):
     addresses = allocate_addresses(state)
     principals = {}
     for profile in PROFILES:
-        principals[profile.key] = {
-            "user": identifier + "." + profile.key,
-            "uuid": str(uuid.uuid4()),
-            "hy": secrets.token_urlsafe(32),
-            "tls": secrets.token_urlsafe(32),
-            "wireguard": key_pair() | {"address": addresses[profile.key]},
-        }
+        principals[profile.key] = principal(identifier, profile.key, addresses[profile.key])
     device = ClientDevice(
         id=identifier,
         name=name,
@@ -86,6 +80,34 @@ def add(state, name, platform):
     )
     state["devices"][identifier] = device
     return device
+
+
+def principal(identifier, profile, address):
+    return {
+        "user": identifier + "." + profile,
+        "uuid": str(uuid.uuid4()),
+        "hy": secrets.token_urlsafe(32),
+        "tls": secrets.token_urlsafe(32),
+        "wireguard": key_pair() | {"address": address},
+    }
+
+
+def ensure_profiles(state):
+    """Provision newly enabled exit profiles without rotating device credentials."""
+    changed = False
+    for device in state["devices"].values():
+        if not device["active"]:
+            continue
+        missing = [profile for profile in PROFILES if profile.key not in device["profiles"]]
+        if missing:
+            addresses = allocate_addresses(state)
+            for profile in missing:
+                device["profiles"][profile.key] = principal(
+                    device["id"], profile.key, addresses[profile.key]
+                )
+            changed = True
+    if changed:
+        save(IDENTITY, state)
 
 
 def find(state, identifier):

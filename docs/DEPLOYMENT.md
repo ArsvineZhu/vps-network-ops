@@ -1,5 +1,7 @@
 # 部署新节点
 
+`Default` 是默认的普通出口，不套用 Windows 或 Apple 指纹模拟；Linux、Android 等设备可直接选择它。每台设备的订阅同时保留 Default、Windows、Apple 三种出口，识别到 Windows 或 Apple 客户端时可调整默认选择。
+
 自动部署面向全新 Ubuntu 24.04 AMD64，也支持用同一份配置更新已由本工具管理的节点。部署入口会更新系统、保留 SSH 端口、安装管理公钥、验证公钥登录、禁用密码登录、开启防火墙，并按选择安装网络服务。需要重启时会等待 SSH 恢复后继续。
 
 ## 准备
@@ -32,7 +34,7 @@ ssh-keygen -t ed25519
 uv run vps-ops deploy setup C:/private/node.yaml
 ```
 
-向导默认选择 `2 Clash（Mihomo）`，同时启用指纹和完整 TCP 链路（WireGuard），无需创建 Tailscale 账户。选择 `1` 可仅安装 Tailscale，选择 `3` 可同时安装。向导依次询问接入方式、网络能力、SSH、证书与首台设备名称及默认平台，然后保存私有配置并立即部署。按提示填写即可，不需要 AI 参与或手写 YAML：
+向导默认选择 `2 Clash（Mihomo）`，同时启用指纹和完整 TCP 链路（WireGuard），无需创建 Tailscale 账户。选择 `1` 可仅安装 Tailscale，选择 `3` 可同时安装。向导依次询问接入方式、网络能力、SSH、证书与首台设备名称及默认出口，然后保存私有配置并立即部署。按提示填写即可，不需要 AI 参与或手写 YAML：
 
 | 接入方式    | 设备怎样使用                     | 安装内容                                      |
 | ----------- | -------------------------------- | --------------------------------------------- |
@@ -42,10 +44,10 @@ uv run vps-ops deploy setup C:/private/node.yaml
 
 Mihomo 是 Clash 内核。选择 Clash 时，服务器始终保留 VLESS、Hysteria2 和 AnyTLS 三种接入协议。两项能力独立选择，所需组件由部署自动安装：
 
-| 能力                 | 选择后会发生什么                                                                                                                              |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| TCP 指纹             | 为设备出口规范化 Windows 或 Apple 的 TCP 建连特征。Clash 三种代理协议使用独立出口；三层转发路径按设备支持的 TCP 选项选择适用指纹。            |
-| 完整 TCP 链路（RTT） | 每台设备的订阅增加 Windows、Apple 两个 WireGuard 节点，并默认使用对应节点，让目标网站测得设备到目标的完整 TCP 往返路径。无需 Tailscale 账户。 |
+| 能力                 | 选择后会发生什么                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TCP 指纹             | 为设备出口规范化 Windows 或 Apple 的 TCP 建连特征。Clash 三种代理协议使用独立出口；三层转发路径按设备支持的 TCP 选项选择适用指纹。                     |
+| 完整 TCP 链路（RTT） | 每台设备的订阅增加 Default、Windows、Apple 三个 WireGuard 节点，并默认使用对应节点，让目标网站测得设备到目标的完整 TCP 往返路径。无需 Tailscale 账户。 |
 
 Tailscale 使用原生三层转发，本身包含设备到服务器的 TCP 延迟；完整链路开关决定是否额外安装 Clash 使用的 WireGuard 节点。仅 Tailscale 时向导不再询问这一项。IPv4 出口启用指纹时，携带 TCP 时间戳的连接采用 Apple 选项布局，未携带时间戳的连接采用 Windows 布局。Windows 原生连接可继续使用未协商时间戳的方式。WireGuard 节点承载 IPv4 流量。
 
@@ -121,9 +123,9 @@ device show "My device"
 usage report
 ```
 
-`device list` 显示设备名称、ID、默认平台和状态，不显示私有链接。`device show 名称或ID` 明确读取该设备的订阅地址。将地址只导入这台物理设备的 Clash 客户端并启用 TUN/VPN。不同物理设备各自登记、各用各的链接；每个链接都包含 Windows 和 Apple 两套指纹配置，可同时使用。两台 Windows 设备也有独立 WireGuard 密钥与地址，可以同时连接。
+`device list` 显示设备名称、ID、默认出口和状态，不显示私有链接。`device show 名称或ID` 明确读取该设备的订阅地址。将地址只导入这台物理设备的 Clash 客户端并启用 TUN/VPN。不同物理设备各自登记、各用各的链接；每个链接都包含 Default、Windows 和 Apple 三套出口配置，可同时使用。两台 Windows 设备也有独立 WireGuard 密钥与地址，可以同时连接。
 
-启用完整 TCP 链路（RTT）时，每个设备链接共八个节点；未启用时共六个节点。订阅更新请求的设备标识只调整默认节点和 TUN 设置，不改变此设备的认证凭据。识别失败时采用登记时保存的默认平台。在客户端的 `Nodes` 中可手动选择 `Windows · WireGuard` 或 `Apple · WireGuard`，以及需要的其他协议。关闭 TCP 指纹时，这两个标签用于选择此设备的不同认证配置，出口使用普通系统 TCP 栈。
+启用完整 TCP 链路（RTT）时，每个设备链接共十二个节点；未启用时共九个节点。订阅更新请求的设备标识只调整默认节点和 TUN 设置，不改变此设备的认证凭据。识别失败时采用登记时保存的默认出口。在客户端的 `Nodes` 中可手动选择 `Default · WireGuard`、`Windows · WireGuard` 或 `Apple · WireGuard`，以及需要的其他协议。关闭 TCP 指纹时，这些标签用于选择此设备的不同认证配置，出口使用普通系统 TCP 栈。
 
 为第二台设备登记独立订阅，在管理会话输入：
 
@@ -131,7 +133,7 @@ usage report
 device add
 ```
 
-按提示填写唯一设备名称与默认平台，再用 `device show 名称或ID` 取链接。也可以直接输入 `device add "Second laptop" --platform Windows`。新增会即时更新代理认证、WireGuard peers 和订阅文件，其他设备继续连接。普通服务器 SSH 终端使用 `vps-ops device add`、`vps-ops device list` 和 `vps-ops device show "Second laptop"`；这些操作在服务器执行。
+按提示填写唯一设备名称与默认出口，再用 `device show 名称或ID` 取链接。也可以直接输入 `device add "Second laptop" --platform Windows`。新增会即时更新代理认证、WireGuard peers 和订阅文件，其他设备继续连接。普通服务器 SSH 终端使用 `vps-ops device add`、`vps-ops device list` 和 `vps-ops device show "Second laptop"`；这些操作在服务器执行。
 
 撤销丢失或不再使用的设备：
 

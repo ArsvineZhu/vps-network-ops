@@ -1,24 +1,26 @@
 # 订阅与规则
 
+`Default` 是默认的普通出口，不套用 Windows 或 Apple 指纹模拟；Linux、Android 等设备可直接选择它。每台设备的订阅同时保留 Default、Windows、Apple 三种出口，识别到 Windows 或 Apple 客户端时可调整默认选择。
+
 服务器通过 HTTPS 同时提供客户端订阅和规则资源。规则资源由 Caddy 转发至 MetaCubeX、VPSDance、ACL4SSR 和 Loyalsoldier；客户端按规则提供者的更新周期获取最新内容。当前策略区分 OpenAI、Anthropic、Google AI、Grok、编程工具、游戏、流媒体、开发服务、国内站点和广告。
 
 ## 每设备订阅与默认指纹
 
-每台物理设备有独立订阅链接及认证凭据。每个链接始终提供该设备的 Windows 和 Apple 两套指纹配置，各含 VLESS、Hysteria2、AnyTLS；启用完整 TCP 链路（RTT）时各增加一个 WireGuard 节点，共八个，默认 WireGuard；关闭时共六个，默认 VLESS。两套配置可同时使用；不同设备之间的密钥、UUID、密码和 WireGuard 地址互不共享。
+每台物理设备有独立订阅链接及认证凭据。每个链接始终提供该设备的 Default、Windows 和 Apple 三套出口配置，各含 VLESS、Hysteria2、AnyTLS；启用完整 TCP 链路（RTT）时各增加一个 WireGuard 节点，共十二个；关闭时共九个。新设备默认 Default，默认协议分别为 WireGuard、VLESS。三套出口配置可同时使用；不同设备之间的密钥、UUID、密码和 WireGuard 地址互不共享。
 
 订阅更新时，User-Agent 只调整 `Nodes` 默认选中项与设备 TUN 配置。同一设备的三个响应变体包含完全相同的认证凭据：
 
 - 检测到 `Darwin`、`iPhone`、`iPad`、`Macintosh`、`Mac OS X` 或 `CFNetwork`：选择 Apple 默认节点；混合 UA 中优先采用 Apple。
 - 未出现 Apple 标识，且检测到 `Windows`、`Win64` 或 `clash-verge/`：选择 Windows 默认节点。
-- 未识别设备：使用登记时保存的默认平台，仍返回此设备的全部节点。
+- 未识别设备：使用登记时保存的默认出口，仍返回此设备的全部节点。
 
-通用 UA `clash-verge/v...` 默认按 Windows 处理；macOS 客户端可指定含 `Darwin` 的订阅下载 UA，或在客户端手动选择 Apple 节点。认证始终由该设备登记的身份决定，User-Agent 不分配身份或改变密钥。
+通用 UA `clash-verge/v...` 使用登记时选择的默认出口（新设备为 Default）；macOS 客户端可指定含 `Darwin` 的订阅下载 UA，或在客户端手动选择 Apple 节点。认证始终由该设备登记的身份决定，User-Agent 不分配身份或改变密钥。
 
 规范 URL 为 `/s/<设备令牌>.yaml`。`.Windows.yaml`、`.Apple.yaml` 是服务器内部响应变体，外部不能直接获取。响应设置 `Cache-Control: no-store` 与 `Vary: User-Agent`。为新设备使用 `device add`，在管理会话中用 `device show 名称或ID` 取私有链接；不同物理设备分别登记。撤销设备会移除三协议认证、WireGuard peers 和响应文件，其旧 URL 返回 404，累计用量保留。
 
 `GLOBAL` 组把 `Nodes` 放在第一项。客户端可能保留上次手动选择；更新订阅后应核对 `Nodes` 的实际选中项，生成配置中的默认值不强制覆盖客户端保存的选择。
 
-客户端 DNS 使用 Fake IP，并通过 `Nodes` 访问 Cloudflare DoH；代理入口采用固定 IPv4。识别为 Windows 时使用 `mixed` TUN 栈、自动路由、严格路由和端口 53 DNS 劫持。Apple 和未识别设备使用通用 TUN 配置，Apple 上的 VPN 接管由客户端 Network Extension 管理。TUN 字段是否生效还取决于客户端是否启用 VPN/TUN，以及客户端的覆写设置。
+客户端 DNS 使用 Fake IP，并通过 `Nodes` 访问 Cloudflare DoH；代理入口采用固定 IPv4。识别为 Windows 时使用 `mixed` TUN 栈、自动路由、严格路由和端口 53 DNS 劫持。Apple 使用通用 TUN 配置，Default 出口使用自动路由与 DNS 劫持，Apple 上的 VPN 接管由客户端 Network Extension 管理。TUN 字段是否生效还取决于客户端是否启用 VPN/TUN，以及客户端的覆写设置。
 
 `check dns` 检查 VPS 网络空间的解析。客户端 DNS 泄露需在设备启用 VPN/TUN 后复测，同时观察端口 53、IPv6 和应用自带 DoH/DoT 的流量路径。WireGuard 在 VPS 转发 IPv4 数据包；三种代理协议的 UDP 按服务端规则直接出站；HTTP/3 是否可用需另外确认客户端 UDP 接管与目标 QUIC 握手。
 

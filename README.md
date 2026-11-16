@@ -1,5 +1,7 @@
 # VPS Network Ops
 
+`Default` 是默认的普通出口，不套用 Windows 或 Apple 指纹模拟；Linux、Android 等设备可直接选择它。每台设备的订阅同时保留 Default、Windows、Apple 三种出口，识别到 Windows 或 Apple 客户端时可调整默认选择。
+
 从全新 Ubuntu 24.04 AMD64 开始部署和维护个人 VPS。向导可选择 Tailscale、Clash（Mihomo）或两者，同时独立选择 TCP 指纹与完整 TCP 链路（RTT）能力。系统更新、SSH 加固、防火墙、证书续期、每设备独立订阅和累计用量共用一个运维入口。
 
 Clash 保留 VLESS、Hysteria2、AnyTLS；开启完整 TCP 链路（RTT）时额外安装独立 WireGuard 服务，并在每个设备的订阅中默认选择 WireGuard 节点，无需 Tailscale 账户。Tailscale 提供原生三层出口和管理通道。设备身份、证书、订阅与凭据保留在服务器，仓库提供源码、服务定义和不含秘密的示例。

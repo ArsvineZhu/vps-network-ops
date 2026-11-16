@@ -6,13 +6,17 @@ import ipaddress
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
-from .fingerprint_profiles import PROFILES
+from .exit_profiles import PROFILES
 
 INTERFACE = "vps-ops"
 PORT = 51820
-NETWORK = "10.220.0.0/16"
-SERVER_ADDRESS = "10.220.0.1/16"
-PROFILE_NETWORKS = {"windows": "10.220.0.0/17", "ios": "10.220.128.0/17"}
+NETWORK = "10.220.0.0/15"
+SERVER_ADDRESS = "10.220.0.1/15"
+PROFILE_NETWORKS = {
+    "default": "10.221.0.0/17",
+    "windows": "10.220.0.0/17",
+    "ios": "10.220.128.0/17",
+}
 
 
 def key_pair():

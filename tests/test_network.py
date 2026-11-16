@@ -58,6 +58,7 @@ def test_forwarding_capture_only_enables_requested_paths():
     assert "ip saddr 10.220.0.0/17 ip ttl set 128" in wg
     assert "ip saddr 10.220.128.0/17 ip ttl set 64" in wg
     assert "tailscale0" not in wg
+    assert "10.221." not in wg
     native = forwarding.fingerprint_rules(
         {"mode": "tailscale", "features": {"fingerprint": True}, "wan": "eth0"}
     )

@@ -11,7 +11,7 @@ import yaml
 
 from . import identity
 from .capabilities import Capabilities
-from .fingerprint_profiles import PROFILES
+from .exit_profiles import PROFILES
 from .runtime import curl, published_subscriptions, run
 
 
@@ -39,7 +39,7 @@ def subscription(c, device_id, url, expected, *, user_agent=None, target=""):
             platform = fingerprint.label
             principal = device["profiles"][fingerprint.key]
             user = principal["user"]
-            expected_route = platform if plan.fingerprint else "DIRECT"
+            expected_route = platform if plan.fingerprint and fingerprint.namespace else "DIRECT"
             if "IN-USER," + user + "," + expected_route not in frontend["rules"]:
                 raise RuntimeError("Server TCP route is missing for this identity")
             for protocol in ("vless", "hysteria2", "anytls"):
@@ -93,7 +93,7 @@ def frontend(c, protocol, target, *, device_id):
             "WireGuard health checks inspect peers without loading device private keys into a probe"
         )
     profiles = published_subscriptions(c)[device_id]["files"]
-    nodes = yaml.safe_load(profiles[target or ""].read_text())["proxies"]
+    nodes = yaml.safe_load(profiles[target if target in profiles else ""].read_text())["proxies"]
     node = next(
         (
             n

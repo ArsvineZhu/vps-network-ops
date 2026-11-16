@@ -24,12 +24,12 @@ def test_devices_have_independent_profile_credentials_and_monotonic_addresses(
     server_key = state["wireguard"]["server"].copy()
     old_address = first["profiles"]["windows"]["wireguard"]["address"]
     old_public = first["profiles"]["windows"]["wireguard"]["public"]
-    assert len(peers(state)) == 4
-    assert "Address = 10.220.0.1/16" in server_configuration(state)
+    assert len(peers(state)) == 6
+    assert "Address = 10.220.0.1/15" in server_configuration(state)
     assert client_node(state, first["id"], "windows", "192.0.2.5")["ip"] == old_address
     identity.revoke(state, first["id"])
     assert set(first) == {"id", "name", "platform", "active"}
-    assert len(peers(state)) == 2
+    assert len(peers(state)) == 3
     assert old_public not in server_configuration(state)
     assert first["id"] + ".windows" in identity.user_labels(state)
     third = identity.add(state, "Laptop three", "Windows")
@@ -53,6 +53,29 @@ def test_active_device_names_are_unique_without_spending_addresses():
     with pytest.raises(ValueError, match="already uses"):
         identity.add(state, "my LAPTOP", "Apple")
     assert state["wireguard"]["next_peer"] == index
+
+
+def test_new_profile_provisioning_preserves_registered_devices(tmp_path, monkeypatch):
+    import copy
+
+    monkeypatch.setattr(identity, "IDENTITY", tmp_path / "identity.json")
+    state = identity.create()
+    current = identity.add(state, "Linux desktop", "Default")
+    lost = identity.add(state, "Lost", "Apple")
+    identity.revoke(state, lost["id"])
+    assert "profiles" in current
+    current["profiles"].pop("default")
+    original = copy.deepcopy(current)
+    identity.ensure_profiles(state)
+    assert "token" in current and "token" in original
+    assert current["token"] == original["token"]
+    assert current["profiles"]["windows"] == original["profiles"]["windows"]
+    assert current["profiles"]["ios"] == original["profiles"]["ios"]
+    assert current["profiles"]["default"]["wireguard"]["address"].startswith("10.221.")
+    assert "profiles" not in lost
+    persisted = identity.load()
+    identity.ensure_profiles(state)
+    assert state == persisted
 
 
 @pytest.mark.parametrize("changed", (False, True))
@@ -126,6 +149,7 @@ def test_hot_reconciliation_syncs_peers_and_closes_only_revoked_connections(
     assert (("DELETE", "/connections/revoked-session", None) in requests) == (not empty)
     assert not any(route.endswith("kept-session") for _, route, _ in requests)
     assert ["wg", "syncconf", "vps-ops", "/dev/stdin"] in commands
+    assert ["ip", "route", "replace", "10.220.0.0/15", "dev", "vps-ops"] in commands
     assert refreshed == [state]
     assert not any("restart" in command for command in commands)
     assert (["caddy", "validate", "--config", str(caddy)] in commands) == changed
@@ -157,7 +181,9 @@ def test_sync_retries_all_historical_revocations_without_their_secrets(tmp_path,
     )
     result = devices.sync()
     assert result == {"active": 1}
-    assert calls == [(state, {first["id"] + ".windows", first["id"] + ".ios"})]
+    assert calls == [
+        (state, {first["id"] + ".default", first["id"] + ".windows", first["id"] + ".ios"})
+    ]
     assert "profiles" not in first and "token" not in first
     assert second["active"]
 

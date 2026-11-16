@@ -114,7 +114,9 @@ def parser():
     add = command("add", device)
     add.add_argument("name", nargs="?", help="Unique name for this physical device")
     add.add_argument(
-        "--platform", choices=["Windows", "Apple"], help="Default profile for an unknown client"
+        "--platform",
+        choices=["Default", "Windows", "Apple"],
+        help="Default profile for an unknown client",
     )
     command("list", device)
     command("sync", device)

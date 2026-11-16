@@ -12,8 +12,8 @@ from pathlib import Path
 import yaml
 
 from .capabilities import Capabilities
+from .exit_profiles import FINGERPRINTS
 from .files import save
-from .fingerprint_profiles import PROFILES
 from .wireguard import INTERFACE, NETWORK, PROFILE_NETWORKS, peers
 
 PRIVATE_V4 = "{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4 }"
@@ -79,14 +79,6 @@ def wireguard_rules(config, active_peers):
 
 
 def refresh_peers(config, state):
-    guard, _ = wireguard_rules(config, peers(state))
-    replace_table("inet", "vps_wireguard_guard", guard)
-
-
-def wireguard_start(config):
-    if not Capabilities.from_config(config).wireguard:
-        raise ValueError("WireGuard is disabled")
-    state = json.loads(Path("/etc/vps-ops/identity.json").read_text())
     guard, nat = wireguard_rules(config, peers(state))
     replace_table("inet", "vps_wireguard_guard", guard)
     replace_table("ip", "vps_wireguard_nat", nat)
@@ -105,6 +97,13 @@ def wireguard_start(config):
         "comment",
         "vps-ops-wireguard",
     )
+
+
+def wireguard_start(config):
+    if not Capabilities.from_config(config).wireguard:
+        raise ValueError("WireGuard is disabled")
+    state = json.loads(Path("/etc/vps-ops/identity.json").read_text())
+    refresh_peers(config, state)
 
 
 def wireguard_stop(config):
@@ -138,7 +137,7 @@ def fingerprint_rules(config):
         " chain forward { type filter hook forward priority -150; policy accept;",
     ]
     if plan.wireguard:
-        for profile, queue in zip(PROFILES, (4947, 4948), strict=True):
+        for profile, queue in zip(FINGERPRINTS, (4947, 4948), strict=True):
             match = f'iifname "{INTERFACE}" oifname "{interface}" ip saddr {PROFILE_NETWORKS[profile.key]}'
             lines.append(f"  {match} ip ttl set {profile.ttl}")
             lines.append(f"  {match} tcp flags & (syn | ack) == syn queue num {queue}")

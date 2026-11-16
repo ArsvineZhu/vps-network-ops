@@ -84,6 +84,9 @@ def reconcile(config, state, revoked_users=()):
 
         stripped = run(["wg-quick", "strip", "/etc/wireguard/vps-ops.conf"])
         run(["wg", "syncconf", "vps-ops", "/dev/stdin"], input=stripped + "\n")
+        from .wireguard import NETWORK
+
+        run(["ip", "route", "replace", NETWORK, "dev", "vps-ops"])
         refresh_peers(config, state)
     if caddy_changed:
         run(["systemctl", "kill", "--kill-whom=main", "--signal=USR1", "caddy"])
@@ -137,7 +140,7 @@ def add(name, platform):
 
 
 def revoke(identifier):
-    from .fingerprint_profiles import PROFILES
+    from .exit_profiles import PROFILES
 
     with node_lock():
         config = node_config()
@@ -167,7 +170,7 @@ def revoke(identifier):
 
 
 def sync():
-    from .fingerprint_profiles import PROFILES
+    from .exit_profiles import PROFILES
 
     with node_lock():
         config = node_config()

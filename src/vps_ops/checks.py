@@ -143,7 +143,7 @@ def _checks(c, section):
             lambda: run(["nft", "list", "table", "ip", "vps_fingerprint_forward"]) and "Active",
         )
     if section in ("all", "proxy") and plan.mihomo:
-        from .fingerprint_profiles import PROFILES
+        from .exit_profiles import PROFILES
         from .probes import frontend, wireguard_peer
 
         for device_id, device in published_subscriptions(c).items():
@@ -163,7 +163,9 @@ def _checks(c, section):
                         raise CheckWarning(
                             "Device peers configured; awaiting the first client connection"
                         )
-                    return "Both profile peers configured; authenticated device handshake observed"
+                    return (
+                        "All exit profile peers configured; authenticated device handshake observed"
+                    )
 
                 check(device["name"] + " WireGuard peer configuration", peer)
     if section in ("all", "subscription"):
@@ -172,7 +174,7 @@ def _checks(c, section):
         for device_id, device in published_subscriptions(c).items():
             for role, agent in (
                 ("Apple", "clash.meta/1.19 Clash/v1 Darwin/25.0 iPhone18,2"),
-                ("Windows", "clash-verge/v2.5.10"),
+                ("Windows", "clash-verge/v2.5.10 Windows NT 10.0"),
                 ("", "curl/8.11.0"),
             ):
                 check(

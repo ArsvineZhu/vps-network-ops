@@ -14,8 +14,8 @@ from .subscription_policy import configure
 
 
 def generate(d, *, target=None):
-    if target not in (None, "Windows", "Apple"):
-        raise ValueError("target must be Windows or Apple")
+    if target not in (None, "Default", "Windows", "Apple"):
+        raise ValueError("target must be Default, Windows or Apple")
     required = {"server", "port", "uuid", "servername", "public_key", "short_id"}
     if not isinstance(d, dict) or not required <= d.keys():
         raise ValueError("missing required descriptor fields")
@@ -79,7 +79,7 @@ def generate(d, *, target=None):
         "reality-opts": {"public-key": key, "short-id": sid},
     }
     tun: dict[str, bool | str | list[str]] = {"enable": True}
-    if target == "Windows":
+    if target in ("Windows", "Default"):
         tun.update(
             {
                 "stack": "mixed",

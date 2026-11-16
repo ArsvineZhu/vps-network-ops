@@ -1,5 +1,7 @@
 # vps-ops 使用手册
 
+`Default` 是默认的普通出口，不套用 Windows 或 Apple 指纹模拟；Linux、Android 等设备可直接选择它。每台设备的订阅同时保留 Default、Windows、Apple 三种出口，识别到 Windows 或 Apple 客户端时可调整默认选择。
+
 ## 新节点部署
 
 从出厂 Ubuntu 24.04 AMD64 起步：
@@ -8,7 +10,7 @@
 uv run vps-ops deploy setup C:/private/node.yaml
 ```
 
-新建向导默认选择 Clash（Mihomo），启用指纹与独立 WireGuard 完整链路，无需 Tailscale 账户。也可选择仅 Tailscale 或两者同装。Clash 首次部署登记首台设备名称及默认平台，为该设备创建独立订阅及两套指纹配置。准备、公钥、DNS 凭据与重启恢复见[部署指南](DEPLOYMENT.md)。
+新建向导默认选择 Clash（Mihomo），启用指纹与独立 WireGuard 完整链路，无需 Tailscale 账户。也可选择仅 Tailscale 或两者同装。Clash 首次部署登记首台设备名称及默认出口，为该设备创建独立订阅及三套出口配置。准备、公钥、DNS 凭据与重启恢复见[部署指南](DEPLOYMENT.md)。
 
 `deploy init` 新建配置，`deploy configure` 修改已有选择，`deploy plan` 查看依赖，`deploy apply` 执行或重试。再次运行 `deploy setup` 保留已存值作为默认并直接部署。改选保留设备注册表，不会恢复已撤销设备。
 
@@ -24,7 +26,7 @@ device revoke "Second laptop"
 device sync
 ```
 
-`device add` 不带参数时询问唯一名称与默认平台；也可直接运行 `device add "Second laptop" --platform Windows`。每台物理设备独立登记，每个链接都包含此设备的 Windows、Apple 两套配置，可同时使用；两台相同平台的设备也有不同密钥与 WireGuard 地址。`device list` 不显示秘密；`device show` 明确显示指定设备的私有 URL。参数可使用设备 ID 或活跃设备的名称；已撤销记录通过 ID 查看。
+`device add` 不带参数时询问唯一名称与默认出口；也可直接运行 `device add "Second laptop" --platform Windows`。每台物理设备独立登记，每个链接都包含此设备的 Default、Windows、Apple 三套出口配置，可同时使用；两台相同平台的设备也有不同密钥与 WireGuard 地址。`device list` 不显示秘密；`device show` 明确显示指定设备的私有 URL。参数可使用设备 ID 或活跃设备的名称；已撤销记录通过 ID 查看。
 
 `device revoke` 即时撤销该设备全部三协议凭据和连接、WireGuard peers 及订阅文件，保留累计用量和历史名称。`device sync` 用于设备变更保存后运行态更新失败的恢复，将注册表重新应用到服务，不重建安装包。普通服务器终端在上述命令前加 `vps-ops`；本机通过 `connect` 进入管理会话后省略前缀。
 
@@ -154,8 +156,8 @@ check 默认等同 check all，单项失败后继续检查其他项：
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | all          | 配置服务均 active，并执行以下全部检查                                                                                                      |
 | dns          | 两个网络空间解析 www.cloudflare.com，并访问 probe_url                                                                                      |
-| proxy        | 启用指纹时检查两个 SOCKS 出口、队列与 eBPF；检查每台设备两套指纹配置的三个协议；WireGuard 检查 peer 配置与真实握手，不使用设备私钥发起探测 |
-| subscription | 校验域名、TLS、HTTP 状态与实际配置内容；每设备订阅验证其两套指纹配置的各协议与 WireGuard 凭据、TCP 出口规则和默认项                        |
+| proxy        | 启用指纹时检查两个 SOCKS 出口、队列与 eBPF；检查每台设备三套出口配置的三个协议；WireGuard 检查 peer 配置与真实握手，不使用设备私钥发起探测 |
+| subscription | 校验域名、TLS、HTTP 状态与实际配置内容；每设备订阅验证其三套出口配置的各协议与 WireGuard 凭据、TCP 出口规则和默认项                        |
 | certificate  | Mihomo 运行凭据中的证书主机名和有效期，要求剩余超过 7 天                                                                                   |
 | tailscale    | 检查实际登录、设备授权与出口批准状态；等待授权显示 warning 和登录地址，就绪后显示 pass                                                     |
 
@@ -248,7 +250,7 @@ vps-ops profile generate /private/node.json /private/profile.yaml --policy /priv
 vps-ops profile generate /private/node.json /private/provider.yaml --kind provider
 ```
 
-默认 --kind profile 生成完整配置，必须提供 --policy。provider 只输出节点列表，可被其他配置引用。此离线命令不会检测设备，也不会为单个 UUID 自动生成两套服务器认证身份。自动部署生成的远程订阅提供一个共享链接，始终提供已有 Windows、Apple 全部身份；下载时根据 User-Agent 调整默认选择，未识别设备仍可手动选择。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
+默认 --kind profile 生成完整配置，必须提供 --policy。provider 只输出节点列表，可被其他配置引用。此离线命令不会检测设备，也不会为单个 UUID 自动生成三套服务器认证身份。自动部署生成的远程订阅为每台物理设备提供独立链接，包含 Default、Windows、Apple 全部出口身份；下载时根据 User-Agent 调整默认选择，未识别设备仍可手动选择。输出文件必须不存在，父目录已存在。生成器提供 VLESS TCP REALITY 节点，文件为 JSON 形式的 YAML。生成后在客户端导入并启用。
 
 ## 创建成员材料
 

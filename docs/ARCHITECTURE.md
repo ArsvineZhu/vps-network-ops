@@ -31,13 +31,13 @@ Caddy 发布 HTTPS 订阅。DNS-01 证书由 acme.sh 续期，Mihomo 通过 syst
 
 ## 三层完整链路与转发指纹
 
-Clash 开启完整链路能力后安装独立 WireGuard 服务，接口为 `vps-ops`，UDP 端口为 51820。订阅增加 Windows、Apple 两个 WireGuard 节点，分别使用持久化的独立密钥和地址。每台物理设备有独立订阅令牌和两套指纹配置，各配置具备独立三协议凭据及 WireGuard 密钥/地址；每个订阅变体包含本设备全部八个节点。UA 仅调整默认和 TUN，未知 UA 使用登记平台。原有三协议继续提供分段 TCP 连接；WireGuard 与原生 Tailscale 将设备连接作为三层数据包转发，目标侧 TCP 的往返时间包含设备到 VPS 的路径。
+Clash 开启完整链路能力后安装独立 WireGuard 服务，接口为 `vps-ops`，UDP 端口为 51820。订阅增加 Default、Windows、Apple 三个 WireGuard 节点，分别使用持久化的独立密钥和地址。每台物理设备有独立订阅令牌和三套出口配置，各配置具备独立三协议凭据及 WireGuard 密钥/地址；每个订阅变体包含本设备全部十二个节点。UA 仅调整默认和 TUN，未知 UA 使用登记出口。原有三协议继续提供分段 TCP 连接；WireGuard 与原生 Tailscale 将设备连接作为三层数据包转发，目标侧 TCP 的往返时间包含设备到 VPS 的路径。
 
 三层路径的可选指纹由 NFQUEUE 处理 IPv4 SYN。WireGuard 按已认证的 peer 地址所属 /17 池选择 Windows 或 Apple；Tailscale 按原生连接是否协商时间戳选择可用的 Apple 或 Windows 选项布局。TTL 按设备族规范化。队列处理进程确认就绪后才安装捕获规则，WireGuard 等待该规则服务后启动。规则、NAT 与 UFW 转发授权分别由所属服务维护，停用时清理。宿主系统维护与管理连接独立保留。
 
 ## 物理设备与运行态变更
 
-`fingerprint_profiles.py` 定义静态 Windows / Apple 指纹；`identity.py` 的注册表保存物理设备。每设备的 principal 为 `设备UUID.指纹key`，同时用于三协议与 WireGuard 记账。地址从 Windows、Apple 各自 /17 池单调分配，撤销后不立即重用。服务器 WireGuard 与 REALITY 密钥保持稳定；SOCKS 后端认证只在节点内部使用。
+`exit_profiles.py` 定义Default 普通出口与静态 Windows / Apple 指纹；`identity.py` 的注册表保存物理设备。每设备的 principal 为 `设备UUID.指纹key`，同时用于三协议与 WireGuard 记账。地址从 Default、Windows、Apple 各自 /17 池单调分配，撤销后不立即重用。服务器 WireGuard 与 REALITY 密钥保持稳定；SOCKS 后端认证只在节点内部使用。
 
 `device add/revoke/sync` 与部署共用 `/var/lib/vps-ops/deploy.lock`，生成器在调用方持锁的范围内工作。注册表持久保存意图后，更新代理认证及设备订阅，通过 Mihomo 私有 Unix 控制接口重载并关闭仅撤销 principal 的现有连接，使用 `wg syncconf` 增删 peers 和刷新精确来源白名单。正常设备变更不重启网络接口、Mihomo 或 Caddy；Caddy 使用固定规范 URL 匹配并读取原子文件，只有模板改变时才校验并优雅重载。
 

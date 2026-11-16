@@ -9,8 +9,8 @@ import yaml
 from vps_ops import identity
 from vps_ops.capabilities import Capabilities
 from vps_ops.clash_profile import generate
+from vps_ops.exit_profiles import FINGERPRINTS, PROFILES
 from vps_ops.files import save
-from vps_ops.fingerprint_profiles import PROFILES
 from vps_ops.subscription_policy import configure
 from vps_ops.wireguard import client_node, server_configuration
 
@@ -52,6 +52,7 @@ def render(c, assets, state=None):
     import grp
 
     state = identity.ensure(c) if state is None else state
+    identity.ensure_profiles(state)
     plan = Capabilities.from_config(c)
     mihomo_group = grp.getgrnam("mihomo").gr_gid
     caddy_group = grp.getgrnam("caddy").gr_gid
@@ -106,7 +107,10 @@ def render(c, assets, state=None):
             cfg["rules"].extend(
                 (
                     "AND,((IN-USER," + user + "),(NETWORK,UDP)),DIRECT",
-                    "IN-USER," + user + "," + (profile.label if plan.fingerprint else "DIRECT"),
+                    "IN-USER,"
+                    + user
+                    + ","
+                    + (profile.label if plan.fingerprint and profile.namespace else "DIRECT"),
                 )
             )
     cfg["rules"].append("MATCH,DIRECT")
@@ -117,7 +121,7 @@ def render(c, assets, state=None):
     policy["base-url"] = "https://" + c["domain"] + ":9443"
     policy["variables"].update(server_ipv4=c["public_ipv4"], ssh_port=c["port"])
     save("/etc/vps-rules/rules.yaml", yaml.safe_dump(policy))
-    for profile in PROFILES:
+    for profile in FINGERPRINTS:
         if plan.fingerprint:
             backend = yaml.safe_load(text("tcpfp/backend.example.yaml"))
             backend["listeners"][0].update(
@@ -195,7 +199,7 @@ def render(c, assets, state=None):
     )
     dependencies = Path("/etc/systemd/system/mihomo.service.d/45-fingerprint.conf")
     if plan.fingerprint:
-        backends = " ".join(profile.namespace + ".service" for profile in PROFILES)
+        backends = " ".join(profile.namespace + ".service" for profile in FINGERPRINTS)
         save(dependencies, "[Unit]\nWants=" + backends + "\nAfter=" + backends + "\n", 0o644)
     else:
         dependencies.unlink(missing_ok=True)

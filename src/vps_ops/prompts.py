@@ -126,11 +126,11 @@ def client_device(name=None, platform=None):
     name = name or input("Physical device name [My device]: ").strip() or "My device"
     if platform is None:
         while True:
-            choice = input("Default platform: 1 Windows / 2 Apple [1]: ").strip() or "1"
-            if choice in ("1", "2"):
-                platform = "Windows" if choice == "1" else "Apple"
+            choice = input("Default exit: 1 Default / 2 Windows / 3 Apple [1]: ").strip() or "1"
+            if choice in ("1", "2", "3"):
+                platform = ("Default", "Windows", "Apple")[int(choice) - 1]
                 break
-            print("Choose 1 or 2.")
+            print("Choose 1, 2 or 3.")
     validate_device(name, platform)
     return {"name": name, "platform": platform}
 

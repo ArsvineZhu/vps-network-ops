@@ -224,6 +224,7 @@ def test_fresh_wizard_defaults_to_clash_fingerprint_and_wireguard(tmp_path, monk
     selected = load(path)
     assert selected["mode"] == "mihomo"
     assert selected["features"] == {"fingerprint": True, "rtt": True}
+    assert selected["device"]["platform"] == "Default"
     assert "wg-quick@vps-ops" in selected["services"]
     assert "tailscaled" not in selected["services"]
 
