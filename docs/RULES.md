@@ -2,15 +2,21 @@
 
 服务器通过 HTTPS 同时提供客户端订阅和规则资源。规则资源由 Caddy 转发至 MetaCubeX、VPSDance、ACL4SSR 和 Loyalsoldier；客户端按规则提供者的更新周期获取最新内容。当前策略区分 OpenAI、Anthropic、Google AI、Grok、编程工具、游戏、流媒体、开发服务、国内站点和广告。
 
-## 设备目标与网络接管
+## 自动设备识别与网络接管
 
-部署时为 `win` 和 `Apple` 分别生成订阅；两者使用各自已有的入口认证凭据，对应服务端独立的 TCP 指纹出口。名称用于标识目标，实际路由身份由认证信息决定。每份订阅只包含该身份的 VLESS、Hysteria2 与 AnyTLS 节点，并将 VLESS 设为默认选择。
+一名拥有两种设备身份的订阅持有者只需要一个随机 HTTPS 订阅地址。更新时 Caddy 根据请求的 `User-Agent` 在已生成的 `WIN`、`Apple` 配置中选择；**服务端认证身份和出口路由由选中的配置决定**，不是靠客户端自定义标签。
 
-主选择组为 `节点`，`GLOBAL` 组默认指向它。切换到全局模式时也使用目标身份；首次导入时按对应身份初始化；如果客户端已经记住旧的策略组选择，重载后仍可能使用其缓存结果，应在客户端确认一次。手动选择的协议不应因重启而被强制重置。
+- Apple：检测到 `Darwin`、`iPhone`、`iPad`、`Macintosh`、`Mac OS X` 或 `CFNetwork`，返回 Apple 认证信息及其 tc/eBPF TCP 出口。
+- WIN：检测到 `Windows`、`Win64` 或 `clash-verge/`，返回 WIN 认证信息及其 NFQUEUE TCP 出口。
+- 既未匹配也无法可靠判断时，返回 HTTP 406，不默默使用错误身份。设备专用旧订阅 URL 仍按原身份提供静态文件，不受此判断影响。
 
-客户端 DNS 默认采用 Fake IP，并通过 `节点` 访问 Cloudflare DoH；代理入口使用固定 IPv4，因此正常连接无需从本地解析节点域名。节点改为域名时，`proxy-server-nameserver` 用于独立引导解析，不等同于普通目标域名的解析出口。
+Clash for Apple 默认的下载身份可能包含 `Darwin/...` 和硬件型号；Clash Verge Rev 默认只报告 `clash-verge/v...`，**并不能凭这个 UA 单独证明运行在 Windows**。在当前仅使用 WIN 上的 Clash Verge Rev 的设备组合中可将其用于默认分发；若以后在 Mac 上使用 Clash Verge Rev，需要配置能够报告平台的下载请求头，或扩展判断方式。User-Agent 可以被修改，不能作为身份认证或安全边界；持有统一订阅 URL 就相当于有权获得两套设备凭据。一个普通新成员仍需要先注册对应的服务器身份，不能凭一个尚未注册的 UUID 自动产生两个 TCP 指纹出口。
 
-Windows 订阅启用 TUN 自动路由、严格路由和 53 端口 DNS 劫持。Apple 订阅启用 TUN 标志，实际 VPN 接管由 iOS 客户端的 Network Extension 管理。普通 DoH/DoT 应用流量不会被端口 53 劫持自动解密，是否走代理仍要以连接日志核查。
+统一 URL 只暴露随机令牌，实际文件后缀 `.WIN.yaml` / `.Apple.yaml` 不在 Caddy 可直接请求的 URL 匹配范围内。响应设置 `Cache-Control: no-store` 与 `Vary: User-Agent`，避免共享缓存把一台设备的配置发给另一台设备。
+
+主选择组名为 `节点`，其默认项为当前设备的 VLESS；`GLOBAL` 组把 `节点` 放在第一项。客户端保留原有手动切换协议的选择状态，因此旧客户端若记录了其他组选择，首次导入统一订阅后应核对实际选中节点。
+
+客户端 DNS 默认采用 Fake IP，并通过 `节点` 访问 Cloudflare DoH；代理入口使用固定 IPv4，不需要先从本地解析代理域名。WIN 订阅启用 TUN 自动路由、严格路由和端口 53 DNS 劫持；Apple 订阅启用 TUN 标志，实际 VPN 接管由其 Network Extension 管理。第三方应用独立使用的 DoH/DoT 流量需要单独观察连接日志，端口 53 的 DNS 劫持不会自动解密这些连接。
 
 ## 调整规则
 
