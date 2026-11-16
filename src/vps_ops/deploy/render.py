@@ -75,6 +75,10 @@ def render(c, assets):
         }
         save(identity, state)
 
+    if not state.get("auto_token"):
+        state["auto_token"] = secrets.token_urlsafe(32)
+        save(identity, state)
+
     def text(name):
         return (assets / name).read_text()
 
@@ -103,8 +107,7 @@ def render(c, assets):
     policy["base-url"] = "https://" + c["domain"] + ":9443"
     policy["variables"].update(server_ipv4=c["public_ipv4"], ssh_port=c["port"])
     save("/etc/vps-rules/rules.yaml", yaml.safe_dump(policy))
-    links = {}
-    for r, target, ip in (("windows", "win", "10.203.1.2"), ("ios", "Apple", "10.203.2.2")):
+    for r, target, ip in (("windows", "WIN", "10.203.1.2"), ("ios", "Apple", "10.203.2.2")):
         user = state["roles"][r]
         backend = yaml.safe_load(text("tcpfp/backend.example.yaml"))
         backend["listeners"][0].update(
@@ -139,12 +142,16 @@ def render(c, assets):
             )
         profile["proxy-groups"][0]["proxies"] = [n["name"] for n in profile["proxies"]]
         profile = configure(profile, policy)
-        path = Path("/srv/vps-subscriptions") / (user["token"] + ".yaml")
-        write_profile(path, profile)
-        os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
-        path.chmod(0o640)
-        links[target] = "https://" + c["domain"] + ":9443/s/" + path.name
-    save("/etc/vps-ops/subscriptions.json", links)
+        root = Path("/srv/vps-subscriptions")
+        for name in (user["token"] + ".yaml", state["auto_token"] + "." + target + ".yaml"):
+            path = root / name
+            write_profile(path, profile)
+            os.chown(path, 0, __import__("grp").getgrnam("caddy").gr_gid)
+            path.chmod(0o640)
+    save(
+        "/etc/vps-ops/subscriptions.json",
+        {"auto": "https://" + c["domain"] + ":9443/s/auto/" + state["auto_token"] + ".yaml"},
+    )
     uid = str(__import__("pwd").getpwnam("mihomo").pw_uid)
     guard = text("mihomo/mihomo-guard.nft")
     for k, v in {
