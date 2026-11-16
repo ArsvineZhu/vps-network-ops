@@ -23,6 +23,7 @@ def main():
     p.add_argument("member", help="成员标识")
     p.add_argument("output", type=Path, help="尚不存在的私有输出目录")
     p.add_argument("--policy", required=True, type=Path, help="共享路由策略文件")
+    p.add_argument("--target", choices=["win", "Apple"], help="设备目标（自动设置客户端选项）")
     a = p.parse_args()
     try:
         import re
@@ -34,7 +35,7 @@ def main():
             raise ValueError()
         ident = str(uuid.uuid4())
         d.update(uuid=ident, name=a.member)
-        profile = generate(d)
+        profile = generate(d, target=a.target)
         profile = configure(profile, yaml.safe_load(a.policy.read_text(encoding="utf-8")))
         a.output.mkdir(mode=0o700, parents=False, exist_ok=False)
         # Ignore before writing credentials, including when output is inside a repository.
