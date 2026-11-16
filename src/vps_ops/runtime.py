@@ -53,7 +53,7 @@ def resolver():
     repair()
 
 
-def curl(url, proxy=None, auth=None, resolve=None):
+def curl(url, proxy=None, auth=None, resolve=None, user_agent=None):
     lines = [
         "silent",
         "show-error",
@@ -69,6 +69,8 @@ def curl(url, proxy=None, auth=None, resolve=None):
         lines.append("proxy-user = " + json.dumps(auth))
     if resolve:
         lines.append("resolve = " + json.dumps(resolve))
+    if user_agent:
+        lines.append("user-agent = " + json.dumps(user_agent))
     code = run(["curl", "--config", "-"], input="\n".join(lines) + "\n")
     if code != "200":
         raise RuntimeError("HTTP " + code)
