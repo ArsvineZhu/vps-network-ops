@@ -10,6 +10,7 @@ from .exit_profiles import PROFILES
 
 INTERFACE = "vps-ops"
 PORT = 51820
+MTU = 1400
 NETWORK = "10.220.0.0/15"
 SERVER_ADDRESS = "10.220.0.1/15"
 PROFILE_NETWORKS = {
@@ -70,7 +71,7 @@ def server_configuration(state):
         "Address = " + SERVER_ADDRESS,
         "ListenPort = " + str(PORT),
         "PrivateKey = " + state["wireguard"]["server"]["private"],
-        "MTU = 1280",
+        f"MTU = {MTU}",
     ]
     for peer in peers(state):
         lines.extend(
@@ -97,6 +98,6 @@ def client_node(state, device_id, profile_key, server):
         "public-key": state["wireguard"]["server"]["public"],
         "udp": True,
         "allowed-ips": ["0.0.0.0/0"],
-        "mtu": 1280,
+        "mtu": MTU,
         "persistent-keepalive": 25,
     }
